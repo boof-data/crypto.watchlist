@@ -2,16 +2,23 @@ let watchlist = [];
 let coinList = [];
 let coinCache = new Map();
 let requestQueue = Promise.resolve();
+let lastUpdate = 0;
 
 async function fetchCoinList() {
     try {
+        if (coinList.length === 0) {
+            const response = await fetch('https://api.coingecko.com/api/v3/coins/list?include_platform=true');
+            coinList = await response.json();
+            console.log('Full coin list fetched:', coinList.slice(0, 5));
+        }
+        // Pre-fetch top 500 for thumbnails and initial data
         const responses = await Promise.all([
             fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
             fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
         ]);
         const data = await Promise.all(responses.map(res => res.json()));
-        coinList = [].concat(...data);
-        coinList.forEach(coin => coinCache.set(coin.id, {
+        const markets = [].concat(...data);
+        markets.forEach(coin => coinCache.set(coin.id, {
             name: coin.name,
             symbol: coin.symbol.toUpperCase(),
             price: coin.current_price,
@@ -20,19 +27,21 @@ async function fetchCoinList() {
             sparkline: coin.sparkline_in_7d.price.slice(-24),
             image: coin.image
         }));
-        console.log('Coin list fetched (500 coins):', coinList.slice(0, 5));
+        console.log('Markets fetched (500 coins):', markets.slice(0, 5));
     } catch (error) {
-        console.error('Failed to fetch markets:', error);
-        const fallback = await fetch('https://api.coingecko.com/api/v3/coins/list');
-        coinList = await fallback.json();
+        console.error('Failed to fetch coin list:', error);
     }
 }
 
 async function fetchCryptoData(coinId) {
-    if (coinCache.has(coinId)) return coinCache.get(coinId);
+    if (coinCache.has(coinId)) {
+        const cached = coinCache.get(coinId);
+        const now = Date.now();
+        if (now - (cached.lastFetched || 0) < 60000) return cached; // Cache valid for 60s
+    }
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 250)); // Lighter delay
             try {
                 const response = await fetch(
                     `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
@@ -46,59 +55,19 @@ async function fetchCryptoData(coinId) {
                     change24h: data.market_data.price_change_percentage_24h,
                     marketCap: data.market_data.market_cap.usd,
                     sparkline: data.market_data.sparkline_7d.price.slice(-24),
-                    image: data.image.thumb
+                    image: data.image.thumb,
+                    lastFetched: Date.now()
                 };
                 coinCache.set(coinId, coinData);
                 resolve(coinData);
             } catch (error) {
                 console.error(`Failed to fetch ${coinId}: ${error.message}`);
                 const fallback = coinList.find(coin => coin.id === coinId);
-                if (fallback && fallback.current_price) {
-                    const coinData = {
-                        name: fallback.name,
-                        symbol: fallback.symbol.toUpperCase(),
-                        price: fallback.current_price,
-                        change24h: fallback.price_change_percentage_24h,
-                        marketCap: fallback.market_cap,
-                        sparkline: fallback.sparkline_in_7d.price.slice(-24),
-                        image: fallback.image
-                    };
-                    coinCache.set(coinId, coinData);
-                    resolve(coinData);
+                if (fallback && coinCache.has(coinId)) {
+                    resolve(coinCache.get(coinId));
                 } else {
                     resolve(null);
                 }
-            }
-        });
-    });
-}
-
-async function fetchCoinByContract(platform, address) {
-    return new Promise((resolve) => {
-        requestQueue = requestQueue.then(async () => {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            try {
-                const response = await fetch(
-                    `https://api.coingecko.com/api/v3/coins/${platform}/contract/${address.toLowerCase()}?localization=false&tickers=false&market_data=true&sparkline=true`
-                );
-                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-                const data = await response.json();
-                const coinData = {
-                    id: data.id,
-                    name: data.name,
-                    symbol: data.symbol.toUpperCase(),
-                    price: data.market_data.current_price.usd,
-                    change24h: data.market_data.price_change_percentage_24h,
-                    marketCap: data.market_data.market_cap.usd,
-                    sparkline: data.market_data.sparkline_7d.price.slice(-24),
-                    image: data.image.thumb
-                };
-                coinCache.set(data.id, coinData);
-                console.log(`Successfully fetched contract ${address} on ${platform}: ${data.name}`);
-                resolve(coinData);
-            } catch (error) {
-                console.error(`Failed to fetch contract ${address} on ${platform}: ${error.message}`);
-                resolve(null);
             }
         });
     });
@@ -142,7 +111,7 @@ function updateWatchlistTable() {
         row.className = 'watchlist-row';
         row.draggable = true;
         row.dataset.index = index;
-        row.dataset.coinId = coin.id; // Store coin ID for reordering
+        row.dataset.coinId = coin.id;
         row.innerHTML = `
             <div>
                 <img src="${coin.image}" alt="${coin.name}" class="coin-logo">
@@ -163,8 +132,11 @@ function updateWatchlistTable() {
     });
     makeSortable();
     saveWatchlist();
+    lastUpdate = Date.now();
     document.getElementById('last-updated').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
 }
+
+const debouncedUpdate = debounce(updateWatchlistTable, 500);
 
 function makeSortable() {
     const tbody = document.getElementById('watchlistBody');
@@ -181,25 +153,31 @@ function makeSortable() {
         draggedItem.style.opacity = '1';
         dropIndicator.remove();
         const newOrder = Array.from(tbody.children).map(row => {
-            const index = parseInt(row.dataset.index);
             return watchlist.find(coin => coin.id === row.dataset.coinId);
         });
-        watchlist = newOrder.filter(coin => coin); // Ensure no undefined entries
+        watchlist = newOrder.filter(coin => coin); // Remove any nulls
         draggedItem = null;
-        updateWatchlistTable();
+        debouncedUpdate(); // Debounced to reduce DOM thrashing
     });
 
     tbody.addEventListener('dragover', (e) => {
         e.preventDefault();
         const target = e.target.closest('.watchlist-row');
-        if (target && draggedItem !== target) {
+        if (draggedItem && draggedItem !== target) {
             const allRows = Array.from(tbody.children);
-            const targetRect = target.getBoundingClientRect();
-            const midPoint = targetRect.top + targetRect.height / 2;
-            if (e.clientY < midPoint) {
-                tbody.insertBefore(dropIndicator, target);
+            if (!target) {
+                // Handle drop at the top
+                if (allRows.length > 0) {
+                    tbody.insertBefore(dropIndicator, allRows[0]);
+                }
             } else {
-                target.after(dropIndicator);
+                const targetRect = target.getBoundingClientRect();
+                const midPoint = targetRect.top + targetRect.height / 2;
+                if (e.clientY < midPoint) {
+                    tbody.insertBefore(dropIndicator, target);
+                } else {
+                    target.after(dropIndicator);
+                }
             }
         }
     });
@@ -207,14 +185,18 @@ function makeSortable() {
     tbody.addEventListener('drop', (e) => {
         e.preventDefault();
         const target = e.target.closest('.watchlist-row');
-        if (target && draggedItem !== target) {
+        if (draggedItem) {
             const allRows = Array.from(tbody.children);
-            const draggedIndex = allRows.indexOf(draggedItem);
-            const targetIndex = allRows.indexOf(target);
-            if (draggedIndex < targetIndex) {
-                target.after(draggedItem);
-            } else {
-                target.before(draggedItem);
+            if (!target && allRows.length > 0) {
+                tbody.insertBefore(draggedItem, allRows[0]); // Drop at top
+            } else if (target && draggedItem !== target) {
+                const draggedIndex = allRows.indexOf(draggedItem);
+                const targetIndex = allRows.indexOf(target);
+                if (draggedIndex < targetIndex) {
+                    target.after(draggedItem);
+                } else {
+                    target.before(draggedItem);
+                }
             }
         }
     });
@@ -228,7 +210,8 @@ function rankSuggestions(input) {
             const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 3 : coin.symbol.toLowerCase().includes(lowerInput) ? 1 : 0;
             const nameMatch = coin.name.toLowerCase() === lowerInput ? 2 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
-            const score = symbolMatch + nameMatch + idMatch;
+            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 3 : 0;
+            const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch);
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
@@ -280,28 +263,22 @@ async function addCoin(coinIdFromDropdown = null) {
     addButton.textContent = 'Adding...';
 
     const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
+    let coinId = query;
     if (isContract) {
-        const platforms = ['ethereum', 'solana'];
-        for (const platform of platforms) {
-            const coinData = await fetchCoinByContract(platform, query);
-            if (coinData) {
-                watchlist.push(coinData);
-                updateWatchlistTable();
-                input.value = '';
-                dropdown.innerHTML = '';
-                addButton.disabled = false;
-                addButton.textContent = 'Add to Watchlist';
-                return;
-            }
+        const coin = coinList.find(c => c.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === query));
+        if (coin) {
+            coinId = coin.id;
+            console.log(`Matched contract ${query} to ${coin.name} (${coin.id})`);
+        } else {
+            alert('Contract not found! Ensure the address is correct.');
+            addButton.disabled = false;
+            addButton.textContent = 'Add to Watchlist';
+            return;
         }
-        alert('Contract not found on Ethereum or Solana! Ensure the address is correct.');
-        addButton.disabled = false;
-        addButton.textContent = 'Add to Watchlist';
-        return;
     }
 
     const exactMatch = coinList.find(coin =>
-        coin.id === query || coin.symbol.toLowerCase() === query || coin.name.toLowerCase() === query
+        coin.id === coinId || coin.symbol.toLowerCase() === coinId || coin.name.toLowerCase() === coinId
     );
     if (!exactMatch) {
         alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
@@ -309,7 +286,7 @@ async function addCoin(coinIdFromDropdown = null) {
         addButton.textContent = 'Add to Watchlist';
         return;
     }
-    const coinId = exactMatch.id;
+    coinId = exactMatch.id;
 
     try {
         const coinData = await fetchCryptoData(coinId);
@@ -366,6 +343,8 @@ function debounce(func, wait) {
 fetchCoinList().then(() => loadWatchlist());
 
 setInterval(async () => {
+    const now = Date.now();
+    if (now - lastUpdate < 60000) return; // Skip if updated recently
     console.log('Refreshing watchlist...');
     for (let i = 0; i < watchlist.length; i++) {
         const coin = watchlist[i];
@@ -374,8 +353,8 @@ setInterval(async () => {
             watchlist[i] = { ...coin, ...updatedCoin };
         }
     }
-    updateWatchlistTable();
-}, 30000);
+    debouncedUpdate();
+}, 60000);
 
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {
     showSuggestions(e.target.value.toLowerCase());
