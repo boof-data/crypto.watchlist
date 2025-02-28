@@ -4,70 +4,49 @@ let coinCache = new Map();
 
 async function fetchCoinList() {
     try {
-        // Fetch top 500 coins across 2 pages
-        const responses = await Promise.all([
-            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
-            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
-        ]);
-        const data = await Promise.all(responses.map(res => res.json()));
-        coinList = [].concat(...data);
-        console.log('Coin list fetched (500 coins):', coinList.slice(0, 5));
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/list');
+        coinList = await response.json();
+        console.log('Coin list fetched (full list):', coinList.slice(0, 5));
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
-        // Fallback to broader list if markets fails
-        const fallbackResponse = await fetch('https://api.coingecko.com/api/v3/coins/list');
-        coinList = await fallbackResponse.json();
-        console.log('Fallback coin list fetched:', coinList.slice(0, 5));
     }
 }
 
-async function fetchCryptoData(coinId) {
+async function fetchCryptoData(coinId, retries = 2) {
     if (coinCache.has(coinId)) return coinCache.get(coinId);
-    try {
-        const response = await fetch(
-            `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
-        );
-        if (!response.ok) {
-            console.warn(`Falling back to coinList for ${coinId}`);
-            const fallback = coinList.find(coin => coin.id === coinId);
-            if (fallback) {
-                return {
-                    id: fallback.id,
-                    name: fallback.name,
-                    symbol: fallback.symbol.toUpperCase(),
-                    price: fallback.current_price,
-                    change24h: fallback.price_change_percentage_24h,
-                    marketCap: fallback.market_cap,
-                    sparkline: fallback.sparkline_in_7d ? fallback.sparkline_in_7d.price.slice(-24) : [],
-                    image: fallback.image
-                };
-            }
-            throw new Error(`HTTP error: ${response.status}`);
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const response = await fetch(
+                `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
+            );
+            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+            const data = await response.json();
+            const coinData = {
+                name: data.name,
+                symbol: data.symbol.toUpperCase(),
+                price: data.market_data.current_price.usd,
+                change24h: data.market_data.price_change_percentage_24h,
+                marketCap: data.market_data.market_cap.usd,
+                sparkline: data.market_data.sparkline_7d.price.slice(-24),
+                image: data.image.thumb
+            };
+            coinCache.set(coinId, coinData);
+            return coinData;
+        } catch (error) {
+            console.error(`Attempt ${i + 1} failed for ${coinId}: ${error.message}`);
+            if (i === retries) return null;
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
         }
-        const data = await response.json();
-        const coinData = {
-            name: data.name,
-            symbol: data.symbol.toUpperCase(),
-            price: data.market_data.current_price.usd,
-            change24h: data.market_data.price_change_percentage_24h,
-            marketCap: data.market_data.market_cap.usd,
-            sparkline: data.market_data.sparkline_7d.price.slice(-24),
-            image: data.image.thumb
-        };
-        coinCache.set(coinId, coinData);
-        return coinData;
-    } catch (error) {
-        console.error(`Failed to fetch ${coinId}: ${error.message}`);
-        return null;
     }
 }
 
 function formatPrice(price) {
     if (!price || price >= 1) return `$${price ? price.toFixed(2) : 'N/A'}`;
     if (price >= 0.01) return `$${price.toFixed(4)}`;
-    const str = price.toFixed(10).replace('0.', '').replace(/0+$/, '');
-    const leadingZeros = Math.max(0, Math.floor(Math.log10(1 / price)) - 1);
-    return `$0.0${leadingZeros > 0 ? `<sub>${leadingZeros}</sub>` : ''}${str}`;
+    const str = price.toString().split('.')[1]; // Get decimal part
+    const leadingZeros = str.match(/^0+/)?.[0].length || 0;
+    const significant = str.replace(/^0+/, '').slice(0, 4); // Take first 4 significant digits
+    return `$0.0<sub>${leadingZeros}</sub>${significant}`;
 }
 
 function drawMiniChart(canvas, sparkline, change24h) {
@@ -129,10 +108,7 @@ function rankSuggestions(input) {
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
-        .sort((a, b) => {
-            const capDiff = (b.market_cap || 0) - (a.market_cap || 0);
-            return capDiff !== 0 ? capDiff : b.score - a.score || a.name.localeCompare(b.name);
-        })
+        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
         .slice(0, 5);
 }
 
@@ -142,14 +118,14 @@ function showSuggestions(input) {
     if (input.length < 1) return;
 
     const matches = rankSuggestions(input);
-    if (!matches.length) return;
+    if (!matches.length) {
+        dropdown.innerHTML = '<div class="suggestion">No matches found</div>';
+        return;
+    }
 
     matches.forEach(coin => {
         const option = document.createElement('div');
-        option.innerHTML = `
-            <img src="${coin.image}" alt="${coin.name}" class="dropdown-logo">
-            ${coin.name} (${coin.symbol.toUpperCase()})
-        `;
+        option.innerHTML = `${coin.name} (${coin.symbol.toUpperCase()})`; // No image here, fetch later
         option.className = 'suggestion';
         option.onclick = () => {
             document.getElementById('coinInput').value = coin.id;
@@ -175,7 +151,7 @@ async function addCoin() {
         coin.id === query || coin.symbol.toLowerCase() === query || coin.name.toLowerCase() === query
     );
     if (!exactMatch) {
-        alert('Coin not found! Try: BTC, ETH, pepe');
+        alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
         return;
     }
     const coinId = exactMatch.id;
