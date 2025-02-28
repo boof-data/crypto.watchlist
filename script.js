@@ -4,7 +4,8 @@ let coinList = [];
 async function fetchCoinList() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true');
-        coinList = await response.json(); // Include sparkline for trend data
+        coinList = await response.json();
+        console.log('Coin list fetched:', coinList.slice(0, 5)); // Debug: Check first 5 coins
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
     }
@@ -23,7 +24,7 @@ async function fetchCryptoData(coinId) {
             price: data.market_data.current_price.usd,
             change24h: data.market_data.price_change_percentage_24h,
             marketCap: data.market_data.market_cap.usd,
-            sparkline: data.market_data.sparkline_7d.price.slice(-24) // Last 24 hours of 7-day data
+            sparkline: data.market_data.sparkline_7d.price.slice(-24) // Last 24 hours
         };
     } catch (error) {
         console.error(`Failed to fetch ${coinId}: ${error.message}`);
@@ -53,9 +54,12 @@ function updateWatchlistTable() {
 }
 
 function rankSuggestions(input) {
-    if (!input || !coinList.length) return [];
+    if (!input || !coinList.length) {
+        console.log('No input or coinList empty'); // Debug
+        return [];
+    }
     const lowerInput = input.toLowerCase();
-    return coinList
+    const matches = coinList
         .map(coin => {
             const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 3 : coin.symbol.toLowerCase().includes(lowerInput) ? 1 : 0;
             const nameMatch = coin.name.toLowerCase() === lowerInput ? 2 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
@@ -69,6 +73,8 @@ function rankSuggestions(input) {
             return capDiff !== 0 ? capDiff : b.score - a.score || a.name.localeCompare(b.name);
         })
         .slice(0, 5);
+    console.log('Suggestions for', lowerInput, ':', matches); // Debug
+    return matches;
 }
 
 function showSuggestions(input) {
@@ -77,7 +83,10 @@ function showSuggestions(input) {
     if (input.length < 1) return;
 
     const matches = rankSuggestions(input);
-    if (!matches.length) return;
+    if (!matches.length) {
+        console.log('No matches found for:', input); // Debug
+        return;
+    }
 
     matches.forEach(coin => {
         const option = document.createElement('div');
@@ -103,17 +112,17 @@ async function addCoin() {
         return;
     }
 
-    let coinId = query;
     const exactMatch = coinList.find(coin =>
         coin.id === query ||
         coin.symbol.toLowerCase() === query ||
         coin.name.toLowerCase() === query
     );
     if (!exactMatch) {
+        console.log('No exact match for:', query, 'in coinList'); // Debug
         alert('Coin not found! Try: BTC, ETH, bitcoin');
         return;
     }
-    coinId = exactMatch.id;
+    const coinId = exactMatch.id;
 
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
@@ -157,6 +166,4 @@ setInterval(async () => {
     updateWatchlistTable();
 }, 30000);
 
-document.getElementById('coinInput').addEventListener('input', (e) => {
-    showSuggestions(e.target.value.toLowerCase());
-});
+document.getElementById('coinInput').add
