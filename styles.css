@@ -26,16 +26,21 @@ input {
     width: 200px;
 }
 
-button:disabled {
+button {
     padding: 8px 16px;
-    background-color: #cccccc;
+    background-color: #4CAF50;
     color: white;
     border: none;
-    cursor: not-allowed;
+    cursor: pointer;
 }
 
 button:hover {
     background-color: #45a049;
+}
+
+button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
 }
 
 table {
@@ -55,9 +60,25 @@ th {
     color: white;
 }
 
-.remove-btn {
-    background-color: #ff4444;
-    padding: 5px 10px;
+.trend-indicator {
+    width: 50px;
+    height: 10px;
+    display: inline-block;
+    vertical-align: middle;
+    border-radius: 2px;
+}
+
+.remove-coin {
+    display: none;
+    margin-left: 10px;
+    font-size: 18px;
+    color: #ff4444;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+tr:hover .remove-coin {
+    display: inline-block;
 }
 
 .dropdown {

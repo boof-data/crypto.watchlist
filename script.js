@@ -3,8 +3,8 @@ let coinList = [];
 
 async function fetchCoinList() {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false');
-        coinList = await response.json(); // Use /markets endpoint for market cap data
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true');
+        coinList = await response.json(); // Include sparkline for trend data
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
     }
@@ -13,7 +13,7 @@ async function fetchCoinList() {
 async function fetchCryptoData(coinId) {
     try {
         const response = await fetch(
-            `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`
+            `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
         );
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
         const data = await response.json();
@@ -22,7 +22,8 @@ async function fetchCryptoData(coinId) {
             symbol: data.symbol.toUpperCase(),
             price: data.market_data.current_price.usd,
             change24h: data.market_data.price_change_percentage_24h,
-            marketCap: data.market_data.market_cap.usd
+            marketCap: data.market_data.market_cap.usd,
+            sparkline: data.market_data.sparkline_7d.price.slice(-24) // Last 24 hours of 7-day data
         };
     } catch (error) {
         console.error(`Failed to fetch ${coinId}: ${error.message}`);
@@ -34,17 +35,17 @@ function updateWatchlistTable() {
     const tbody = document.getElementById('watchlistBody');
     tbody.innerHTML = '';
     watchlist.forEach((coin, index) => {
+        const trendColor = coin.change24h >= 0 ? 'green' : 'red';
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${coin.name || 'Unknown'}</td>
             <td>${coin.symbol || '?'}</td>
             <td>$${coin.price ? coin.price.toFixed(2) : 'N/A'}</td>
-            <td style="color: ${coin.change24h >= 0 ? 'green' : 'red'}">
-                ${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%
-            </td>
+            <td style="color: ${trendColor}">${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%</td>
             <td>$${coin.marketCap ? coin.marketCap.toLocaleString() : 'N/A'}</td>
             <td>
-                <button class="remove-btn" onclick="removeCoin(${index})">Remove</button>
+                <div class="trend-indicator" style="background-color: ${trendColor};"></div>
+                <span class="remove-coin" onclick="removeCoin(${index})">×</span>
             </td>
         `;
         tbody.appendChild(row);
@@ -64,7 +65,6 @@ function rankSuggestions(input) {
         })
         .filter(Boolean)
         .sort((a, b) => {
-            // Sort by market cap descending first, then by score, then alphabetically
             const capDiff = (b.market_cap || 0) - (a.market_cap || 0);
             return capDiff !== 0 ? capDiff : b.score - a.score || a.name.localeCompare(b.name);
         })
@@ -103,7 +103,6 @@ async function addCoin() {
         return;
     }
 
-    // Check if the input matches a coin exactly by id, symbol, or name
     let coinId = query;
     const exactMatch = coinList.find(coin =>
         coin.id === query ||
@@ -116,7 +115,6 @@ async function addCoin() {
     }
     coinId = exactMatch.id;
 
-    // Show loading state
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
 
@@ -135,7 +133,6 @@ async function addCoin() {
         console.error('Error adding coin:', error);
         alert('An error occurred while adding the coin.');
     } finally {
-        // Reset button state regardless of success or failure
         addButton.disabled = false;
         addButton.textContent = 'Add to Watchlist';
     }
@@ -154,7 +151,7 @@ setInterval(async () => {
         const coin = watchlist[i];
         const updatedCoin = await fetchCryptoData(coin.id);
         if (updatedCoin) {
-            watchlist[i] = { ...coin, price: updatedCoin.price, change24h: updatedCoin.change24h, marketCap: updatedCoin.marketCap };
+            watchlist[i] = { ...coin, price: updatedCoin.price, change24h: updatedCoin.change24h, marketCap: updatedCoin.marketCap, sparkline: updatedCoin.sparkline };
         }
     }
     updateWatchlistTable();
