@@ -1,15 +1,17 @@
 let watchlist = [];
 let coinList = [];
 let coinCache = new Map();
+let requestQueue = Promise.resolve(); // Queue for rate limiting
+let autoRefresh = true;
 
 async function fetchCoinList() {
     try {
-        // Fetch top 250 coins with market data for thumbnails and initial data
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true');
-        const marketData = await response.json();
-        coinList = marketData;
-        console.log('Initial coin list fetched (250 coins):', coinList.slice(0, 5));
-        // Store in cache for quick access
+        const responses = await Promise.all([
+            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
+            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
+        ]);
+        const data = await Promise.all(responses.map(res => res.json()));
+        coinList = [].concat(...data);
         coinList.forEach(coin => coinCache.set(coin.id, {
             name: coin.name,
             symbol: coin.symbol.toUpperCase(),
@@ -19,41 +21,40 @@ async function fetchCoinList() {
             sparkline: coin.sparkline_in_7d.price.slice(-24),
             image: coin.image
         }));
+        console.log('Coin list fetched (500 coins):', coinList.slice(0, 5));
     } catch (error) {
-        console.error('Failed to fetch initial coin list:', error);
-        // Fallback to full list if needed
-        const fallbackResponse = await fetch('https://api.coingecko.com/api/v3/coins/list');
-        coinList = await fallbackResponse.json();
-        console.log('Fallback coin list fetched:', coinList.slice(0, 5));
+        console.error('Failed to fetch markets:', error);
+        const fallback = await fetch('https://api.coingecko.com/api/v3/coins/list');
+        coinList = await fallback.json();
+        console.log('Fallback list fetched:', coinList.slice(0, 5));
     }
 }
 
-async function fetchCryptoData(coinId, retries = 3) {
+async function fetchCryptoData(coinId) {
     if (coinCache.has(coinId)) return coinCache.get(coinId);
-    for (let i = 0; i <= retries; i++) {
-        try {
+    return new Promise((resolve) => {
+        requestQueue = requestQueue.then(async () => {
             await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
-            const response = await fetch(
-                `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
-            );
-            if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-            const data = await response.json();
-            const coinData = {
-                name: data.name,
-                symbol: data.symbol.toUpperCase(),
-                price: data.market_data.current_price.usd,
-                change24h: data.market_data.price_change_percentage_24h,
-                marketCap: data.market_data.market_cap.usd,
-                sparkline: data.market_data.sparkline_7d.price.slice(-24),
-                image: data.image.thumb
-            };
-            coinCache.set(coinId, coinData);
-            console.log(`Fetched ${coinId} successfully`);
-            return coinData;
-        } catch (error) {
-            console.error(`Attempt ${i + 1} failed for ${coinId}: ${error.message}`);
-            if (i === retries) {
-                // Fallback to coinList if available
+            try {
+                const response = await fetch(
+                    `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
+                );
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                const data = await response.json();
+                const coinData = {
+                    name: data.name,
+                    symbol: data.symbol.toUpperCase(),
+                    price: data.market_data.current_price.usd,
+                    change24h: data.market_data.price_change_percentage_24h,
+                    marketCap: data.market_data.market_cap.usd,
+                    sparkline: data.market_data.sparkline_7d.price.slice(-24),
+                    image: data.image.thumb
+                };
+                coinCache.set(coinId, coinData);
+                console.log(`Fetched ${coinId}`);
+                resolve(coinData);
+            } catch (error) {
+                console.error(`Failed to fetch ${coinId}: ${error.message}`);
                 const fallback = coinList.find(coin => coin.id === coinId);
                 if (fallback && fallback.current_price) {
                     const coinData = {
@@ -66,11 +67,38 @@ async function fetchCryptoData(coinId, retries = 3) {
                         image: fallback.image
                     };
                     coinCache.set(coinId, coinData);
-                    return coinData;
+                    resolve(coinData);
+                } else {
+                    resolve(null);
                 }
-                return null;
             }
-        }
+        });
+    });
+}
+
+async function fetchCoinByContract(platform, address) {
+    try {
+        await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit delay
+        const response = await fetch(
+            `https://api.coingecko.com/api/v3/coins/${platform}/contract/${address}?localization=false&tickers=false&market_data=true&sparkline=true`
+        );
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        const data = await response.json();
+        const coinData = {
+            id: data.id,
+            name: data.name,
+            symbol: data.symbol.toUpperCase(),
+            price: data.market_data.current_price.usd,
+            change24h: data.market_data.price_change_percentage_24h,
+            marketCap: data.market_data.market_cap.usd,
+            sparkline: data.market_data.sparkline_7d.price.slice(-24),
+            image: data.image.thumb
+        };
+        coinCache.set(data.id, coinData);
+        return coinData;
+    } catch (error) {
+        console.error(`Failed to fetch contract ${address} on ${platform}: ${error.message}`);
+        return null;
     }
 }
 
@@ -128,6 +156,7 @@ function updateWatchlistTable() {
         drawMiniChart(canvas, coin.sparkline, coin.change24h);
     });
     saveWatchlist();
+    document.getElementById('last-updated').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
 }
 
 function rankSuggestions(input) {
@@ -157,7 +186,7 @@ function showSuggestions(input) {
         return;
     }
 
-    matches.forEach(async (coin) => {
+    matches.forEach(coin => {
         const cachedCoin = coinCache.get(coin.id) || coin;
         const option = document.createElement('div');
         option.innerHTML = `
@@ -165,23 +194,46 @@ function showSuggestions(input) {
             ${coin.name} (${coin.symbol.toUpperCase()})
         `;
         option.className = 'suggestion';
+        option.dataset.coinId = coin.id; // Store ID explicitly
         option.onclick = () => {
             document.getElementById('coinInput').value = coin.id;
             dropdown.innerHTML = '';
-            addCoin();
+            addCoin(coin.id); // Pass ID directly
         };
         dropdown.appendChild(option);
     });
 }
 
-async function addCoin() {
+async function addCoin(coinIdFromDropdown = null) {
     const input = document.getElementById('coinInput');
-    const query = input.value.trim().toLowerCase();
+    const query = coinIdFromDropdown || input.value.trim().toLowerCase();
     const dropdown = document.getElementById('suggestions');
     const addButton = document.querySelector('.watchlist-controls button');
 
     if (!query || watchlist.some(coin => coin.id === query)) {
         alert('Please enter a valid coin or it already exists!');
+        return;
+    }
+
+    const isContract = query.startsWith('0x') || /^[A-Za-z0-9]{32,44}$/.test(query);
+    let coinId = query;
+    if (isContract) {
+        const platforms = ['ethereum', 'solana'];
+        for (const platform of platforms) {
+            const coinData = await fetchCoinByContract(platform, query);
+            if (coinData) {
+                watchlist.push(coinData);
+                updateWatchlistTable();
+                input.value = '';
+                dropdown.innerHTML = '';
+                addButton.disabled = false;
+                addButton.textContent = 'Add to Watchlist';
+                return;
+            }
+        }
+        alert('Contract not found on Ethereum or Solana!');
+        addButton.disabled = false;
+        addButton.textContent = 'Add to Watchlist';
         return;
     }
 
@@ -192,7 +244,7 @@ async function addCoin() {
         alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
         return;
     }
-    const coinId = exactMatch.id;
+    coinId = exactMatch.id;
 
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
@@ -241,6 +293,19 @@ async function loadWatchlist() {
     }
 }
 
+function exportToCSV() {
+    const csv = ['Name,Symbol,Price,24h Change,Market Cap'].concat(
+        watchlist.map(coin => `${coin.name},${coin.symbol},${coin.price},${coin.change24h},${coin.marketCap}`)
+    ).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'watchlist.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 function debounce(func, wait) {
     let timeout;
     return function (...args) {
@@ -251,7 +316,8 @@ function debounce(func, wait) {
 
 fetchCoinList().then(() => loadWatchlist());
 
-setInterval(async () => {
+let refreshInterval = setInterval(async () => {
+    if (!autoRefresh) return;
     console.log('Refreshing watchlist...');
     for (let i = 0; i < watchlist.length; i++) {
         const coin = watchlist[i];
@@ -266,3 +332,44 @@ setInterval(async () => {
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {
     showSuggestions(e.target.value.toLowerCase());
 }, 300));
+
+// Enhanced UI controls
+document.addEventListener('DOMContentLoaded', () => {
+    const header = document.createElement('div');
+    header.className = 'header';
+    header.innerHTML = `
+        <span class="logo">CryptoWatch</span>
+        <div class="controls">
+            <button id="theme-toggle">Toggle Theme</button>
+            <button id="refresh-toggle">${autoRefresh ? 'Pause' : 'Resume'} Refresh</button>
+            <button id="export-csv">Export CSV</button>
+            <span id="last-updated">Last Updated: --</span>
+        </div>
+    `;
+    document.body.insertBefore(header, document.querySelector('.container'));
+
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+        document.body.classList.toggle('light-theme');
+    });
+    document.getElementById('refresh-toggle').addEventListener('click', (e) => {
+        autoRefresh = !autoRefresh;
+        e.target.textContent = autoRefresh ? 'Pause Refresh' : 'Resume Refresh';
+        if (autoRefresh && !refreshInterval) {
+            refreshInterval = setInterval(async () => {
+                console.log('Refreshing watchlist...');
+                for (let i = 0; i < watchlist.length; i++) {
+                    const coin = watchlist[i];
+                    const updatedCoin = await fetchCryptoData(coin.id);
+                    if (updatedCoin) {
+                        watchlist[i] = { ...coin, ...updatedCoin };
+                    }
+                }
+                updateWatchlistTable();
+            }, 30000);
+        } else if (!autoRefresh) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    });
+    document.getElementById('export-csv').addEventListener('click', exportToCSV);
+});
