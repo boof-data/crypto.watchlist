@@ -4,11 +4,20 @@ let coinCache = new Map();
 
 async function fetchCoinList() {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true');
-        coinList = await response.json();
-        console.log('Coin list fetched:', coinList.slice(0, 5));
+        // Fetch top 500 coins across 2 pages
+        const responses = await Promise.all([
+            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
+            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
+        ]);
+        const data = await Promise.all(responses.map(res => res.json()));
+        coinList = [].concat(...data);
+        console.log('Coin list fetched (500 coins):', coinList.slice(0, 5));
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
+        // Fallback to broader list if markets fails
+        const fallbackResponse = await fetch('https://api.coingecko.com/api/v3/coins/list');
+        coinList = await fallbackResponse.json();
+        console.log('Fallback coin list fetched:', coinList.slice(0, 5));
     }
 }
 
@@ -29,7 +38,7 @@ async function fetchCryptoData(coinId) {
                     price: fallback.current_price,
                     change24h: fallback.price_change_percentage_24h,
                     marketCap: fallback.market_cap,
-                    sparkline: fallback.sparkline_in_7d.price.slice(-24),
+                    sparkline: fallback.sparkline_in_7d ? fallback.sparkline_in_7d.price.slice(-24) : [],
                     image: fallback.image
                 };
             }
@@ -53,11 +62,20 @@ async function fetchCryptoData(coinId) {
     }
 }
 
+function formatPrice(price) {
+    if (!price || price >= 1) return `$${price ? price.toFixed(2) : 'N/A'}`;
+    if (price >= 0.01) return `$${price.toFixed(4)}`;
+    const str = price.toFixed(10).replace('0.', '').replace(/0+$/, '');
+    const leadingZeros = Math.max(0, Math.floor(Math.log10(1 / price)) - 1);
+    return `$0.0${leadingZeros > 0 ? `<sub>${leadingZeros}</sub>` : ''}${str}`;
+}
+
 function drawMiniChart(canvas, sparkline, change24h) {
     const ctx = canvas.getContext('2d');
     const width = canvas.width = 60;
     const height = canvas.height = 20;
     ctx.clearRect(0, 0, width, height);
+    if (!sparkline.length) return;
     const maxPrice = Math.max(...sparkline);
     const minPrice = Math.min(...sparkline);
     const scaleY = (height - 2) / (maxPrice - minPrice || 1);
@@ -84,7 +102,7 @@ function updateWatchlistTable() {
                 ${coin.name || 'Unknown'}
             </td>
             <td>${coin.symbol || '?'}</td>
-            <td>$${coin.price ? coin.price.toFixed(2) : 'N/A'}</td>
+            <td>${formatPrice(coin.price)}</td>
             <td style="color: ${trendColor}">${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%</td>
             <td>$${coin.marketCap ? coin.marketCap.toLocaleString() : 'N/A'}</td>
             <td>
@@ -96,7 +114,7 @@ function updateWatchlistTable() {
         const canvas = row.querySelector('.trend-chart');
         drawMiniChart(canvas, coin.sparkline, coin.change24h);
     });
-    saveWatchlist(); // Save after every update
+    saveWatchlist();
 }
 
 function rankSuggestions(input) {

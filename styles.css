@@ -95,6 +95,11 @@ td {
     font-size: 0.95em;
 }
 
+sub {
+    font-size: 0.7em;
+    vertical-align: sub;
+}
+
 .coin-logo, .dropdown-logo {
     width: 24px;
     height: 24px;
