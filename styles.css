@@ -1,164 +1,163 @@
 body {
-    font-family: 'Segoe UI', Arial, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #1a1a1a;
-    color: #e0e0e0;
+    background-color: #1A1C2A;
+    color: #E0E1E8;
     transition: all 0.3s ease;
 }
 
 body.light-theme {
-    background-color: #f5f5f5;
-    color: #333;
-}
-
-body.light-theme .container, body.light-theme table {
-    background: #fff;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-body.light-theme tr:hover {
-    background: #f0f0f0;
-}
-
-body.light-theme .dropdown {
-    background: #fff;
-    border: 1px solid #ddd;
-}
-
-body.light-theme .suggestion:hover {
-    background: #f0f0f0;
+    background-color: #F5F6FA;
+    color: #2A2C3A;
 }
 
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px;
-    background: #252525;
+    padding: 20px 40px;
+    background: linear-gradient(135deg, #6B48FF, #00D4D4);
     color: #fff;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-body.light-theme .header {
-    background: #fff;
-    color: #333;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 .logo {
-    font-size: 1.5em;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+    font-size: 1.8em;
+    font-weight: 700;
+    letter-spacing: 1px;
 }
 
 .controls {
     display: flex;
-    gap: 15px;
+    gap: 20px;
     align-items: center;
 }
 
 #last-updated {
     font-size: 0.9em;
-    opacity: 0.8;
+    opacity: 0.9;
 }
 
 .container {
-    max-width: 1000px;
+    max-width: 1100px;
     margin: 40px auto;
     padding: 20px;
-    background: #252525;
-    border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    background: #25273A;
+    border-radius: 12px;
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
     animation: fadeIn 0.5s ease;
 }
 
-h1 {
-    text-align: center;
-    color: #ffffff;
-    font-size: 2em;
-    margin-bottom: 30px;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+body.light-theme .container {
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
 .watchlist-controls {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
+    gap: 15px;
     margin-bottom: 30px;
     position: relative;
 }
 
 input {
-    padding: 12px;
-    width: 300px;
+    padding: 14px;
+    width: 320px;
     border: none;
-    border-radius: 5px;
-    background: #333;
-    color: #fff;
+    border-radius: 8px;
+    background: #33354A;
+    color: #E0E1E8;
     font-size: 1em;
     transition: all 0.3s ease;
 }
 
 body.light-theme input {
-    background: #e0e0e0;
-    color: #333;
+    background: #E8E9F0;
+    color: #2A2C3A;
 }
 
 input:focus {
     outline: none;
-    box-shadow: 0 0 5px rgba(76, 175, 80, 0.7);
+    box-shadow: 0 0 8px rgba(107, 72, 255, 0.5);
 }
 
 button {
-    padding: 12px 24px;
-    background-color: #4CAF50;
+    padding: 14px 28px;
+    background: linear-gradient(135deg, #6B48FF, #00D4D4);
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 1em;
-    transition: background 0.3s ease, transform 0.2s ease;
+    font-weight: 600;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 button:hover {
-    background-color: #45a049;
     transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(107, 72, 255, 0.5);
 }
 
 button:disabled {
-    background-color: #666;
+    background: #666;
     cursor: not-allowed;
     transform: none;
+    box-shadow: none;
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: #2c2c2c;
+.watchlist {
+    background: #2A2C3A;
     border-radius: 8px;
     overflow: hidden;
 }
 
-th, td {
-    padding: 15px;
-    text-align: left;
-    border-bottom: 1px solid #3a3a3a;
+body.light-theme .watchlist {
+    background: #fff;
 }
 
-th {
-    background: #4CAF50;
-    color: white;
+.table-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 1fr;
+    padding: 15px;
+    background: #33354A;
+    font-weight: 600;
     text-transform: uppercase;
     font-size: 0.9em;
     letter-spacing: 1px;
+    color: #A0A2B0;
 }
 
-td {
-    font-size: 0.95em;
+body.light-theme .table-header {
+    background: #E8E9F0;
+    color: #6A6C80;
+}
+
+.watchlist-body {
+    min-height: 100px;
+}
+
+.watchlist-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1.5fr 1fr;
+    padding: 15px;
+    border-bottom: 1px solid #3A3C50;
+    transition: background 0.2s ease;
+    cursor: grab;
+}
+
+.watchlist-row:hover {
+    background: #33354A;
+}
+
+body.light-theme .watchlist-row {
+    border-bottom: 1px solid #E0E1E8;
+}
+
+body.light-theme .watchlist-row:hover {
+    background: #F0F1F8;
 }
 
 sub {
@@ -170,7 +169,7 @@ sub {
     width: 24px;
     height: 24px;
     vertical-align: middle;
-    margin-right: 8px;
+    margin-right: 10px;
 }
 
 .trend-chart {
@@ -181,46 +180,56 @@ sub {
     display: none;
     margin-left: 10px;
     font-size: 20px;
-    color: #ff4444;
+    color: #FF486B;
     cursor: pointer;
     vertical-align: middle;
     font-weight: bold;
 }
 
-tr:hover .remove-coin {
+.watchlist-row:hover .remove-coin {
     display: inline-block;
-}
-
-tr:hover {
-    background: #333;
-    transition: background 0.2s ease;
 }
 
 .dropdown {
     position: absolute;
     top: 100%;
     left: 0;
-    background: #2c2c2c;
-    border: 1px solid #444;
-    border-radius: 5px;
+    background: #25273A;
+    border: 1px solid #3A3C50;
+    border-radius: 8px;
     max-height: 200px;
     overflow-y: auto;
-    width: 300px;
+    width: 320px;
     z-index: 1000;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
     animation: slideIn 0.2s ease;
 }
 
+body.light-theme .dropdown {
+    background: #fff;
+    border: 1px solid #E0E1E8;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+}
+
 .suggestion {
-    padding: 10px;
+    padding: 12px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    color: #e0e0e0;
+    color: #E0E1E8;
+    transition: background 0.2s ease;
+}
+
+body.light-theme .suggestion {
+    color: #2A2C3A;
 }
 
 .suggestion:hover {
-    background-color: #3a3a3a;
+    background: #33354A;
+}
+
+body.light-theme .suggestion:hover {
+    background: #F0F1F8;
 }
 
 @keyframes fadeIn {

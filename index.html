@@ -3,30 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Watchlist</title>
+    <title>CryptoWatch</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div class="header">
+        <span class="logo">CryptoWatch</span>
+        <div class="controls">
+            <button id="theme-toggle">Toggle Theme</button>
+            <span id="last-updated">Last Updated: --</span>
+        </div>
+    </div>
     <div class="container">
-        <h1>Crypto Watchlist</h1>
         <div class="watchlist-controls">
-            <input type="text" id="coinInput" placeholder="Search coins or enter contract address (e.g., BTC, 0x...)">
+            <input type="text" id="coinInput" placeholder="Search coins or contract address (e.g., BTC, 0x...)">
             <div id="suggestions" class="dropdown"></div>
             <button onclick="addCoin()">Add to Watchlist</button>
         </div>
-        <table id="cryptoTable">
-            <thead>
-                <tr>
-                    <th>Coin</th>
-                    <th>Symbol</th>
-                    <th>Price (USD)</th>
-                    <th>24h Change</th>
-                    <th>Market Cap (USD)</th>
-                    <th>24h Trend</th>
-                </tr>
-            </thead>
-            <tbody id="watchlistBody"></tbody>
-        </table>
+        <div class="watchlist">
+            <div class="table-header">
+                <span>Coin</span>
+                <span>Symbol</span>
+                <span>Price (USD)</span>
+                <span>24h Change</span>
+                <span>Market Cap (USD)</span>
+                <span>24h Trend</span>
+            </div>
+            <div id="watchlistBody" class="watchlist-body"></div>
+        </div>
     </div>
     <script src="script.js"></script>
 </body>
