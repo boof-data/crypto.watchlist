@@ -18,6 +18,7 @@ h1 {
 .watchlist-controls {
     margin: 20px 0;
     text-align: center;
+    position: relative;
 }
 
 input {
@@ -25,12 +26,12 @@ input {
     width: 200px;
 }
 
-button {
+button:disabled {
     padding: 8px 16px;
-    background-color: #4CAF50;
+    background-color: #cccccc;
     color: white;
     border: none;
-    cursor: pointer;
+    cursor: not-allowed;
 }
 
 button:hover {
@@ -57,4 +58,23 @@ th {
 .remove-btn {
     background-color: #ff4444;
     padding: 5px 10px;
+}
+
+.dropdown {
+    position: absolute;
+    background: white;
+    border: 1px solid #ddd;
+    max-height: 200px;
+    overflow-y: auto;
+    width: 200px;
+    z-index: 1000;
+}
+
+.suggestion {
+    padding: 8px;
+    cursor: pointer;
+}
+
+.suggestion:hover {
+    background-color: #f0f0f0;
 }
