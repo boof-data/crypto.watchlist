@@ -94,6 +94,7 @@ async function fetchCoinByContract(platform, address) {
                     image: data.image.thumb
                 };
                 coinCache.set(data.id, coinData);
+                console.log(`Fetched contract ${address} on ${platform}: ${data.name}`);
                 resolve(coinData);
             } catch (error) {
                 console.error(`Failed to fetch contract ${address} on ${platform}: ${error.message}`);
@@ -122,7 +123,7 @@ function drawMiniChart(canvas, sparkline, change24h) {
     const minPrice = Math.min(...sparkline);
     const scaleY = (height - 2) / (maxPrice - minPrice || 1);
     ctx.beginPath();
-    ctx.strokeStyle = change24h >= 0 ? '#00D4D4' : '#FF486B'; // Updated colors
+    ctx.strokeStyle = change24h >= 0 ? '#00CC00' : '#FF486B'; // Green for gains
     ctx.lineWidth = 1;
     sparkline.forEach((price, i) => {
         const x = (i / (sparkline.length - 1)) * (width - 1);
@@ -136,7 +137,7 @@ function updateWatchlistTable() {
     const tbody = document.getElementById('watchlistBody');
     tbody.innerHTML = '';
     watchlist.forEach((coin, index) => {
-        const trendColor = coin.change24h >= 0 ? '#00D4D4' : '#FF486B';
+        const trendColor = coin.change24h >= 0 ? '#00CC00' : '#FF486B';
         const row = document.createElement('div');
         row.className = 'watchlist-row';
         row.draggable = true;
@@ -167,18 +168,34 @@ function updateWatchlistTable() {
 function makeSortable() {
     const tbody = document.getElementById('watchlistBody');
     let draggedItem = null;
+    let dropIndicator = document.createElement('div');
+    dropIndicator.className = 'drop-indicator';
     tbody.addEventListener('dragstart', (e) => {
         draggedItem = e.target.closest('.watchlist-row');
         setTimeout(() => draggedItem.style.opacity = '0.5', 0);
     });
     tbody.addEventListener('dragend', () => {
         draggedItem.style.opacity = '1';
+        dropIndicator.remove();
         draggedItem = null;
         const newOrder = Array.from(tbody.children).map(row => watchlist[row.dataset.index]);
         watchlist = newOrder;
         updateWatchlistTable();
     });
-    tbody.addEventListener('dragover', (e) => e.preventDefault());
+    tbody.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const target = e.target.closest('.watchlist-row');
+        if (target && draggedItem !== target) {
+            const allRows = Array.from(tbody.children);
+            const targetRect = target.getBoundingClientRect();
+            const midPoint = targetRect.top + targetRect.height / 2;
+            if (e.clientY < midPoint) {
+                tbody.insertBefore(dropIndicator, target);
+            } else {
+                target.after(dropIndicator);
+            }
+        }
+    });
     tbody.addEventListener('drop', (e) => {
         e.preventDefault();
         const target = e.target.closest('.watchlist-row');
@@ -254,7 +271,7 @@ async function addCoin(coinIdFromDropdown = null) {
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
 
-    const isContract = query.startsWith('0x') || /^[A-Za-z0-9]{32,44}$/.test(query);
+    const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
     if (isContract) {
         const platforms = ['ethereum', 'solana'];
         for (const platform of platforms) {
@@ -269,7 +286,7 @@ async function addCoin(coinIdFromDropdown = null) {
                 return;
             }
         }
-        alert('Contract not found on Ethereum or Solana!');
+        alert('Contract not found on Ethereum or Solana! Ensure the address is correct.');
         addButton.disabled = false;
         addButton.textContent = 'Add to Watchlist';
         return;

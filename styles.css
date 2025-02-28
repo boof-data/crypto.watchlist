@@ -137,6 +137,7 @@ body.light-theme .table-header {
 
 .watchlist-body {
     min-height: 100px;
+    position: relative;
 }
 
 .watchlist-row {
@@ -158,6 +159,14 @@ body.light-theme .watchlist-row {
 
 body.light-theme .watchlist-row:hover {
     background: #F0F1F8;
+}
+
+.drop-indicator {
+    height: 2px;
+    background: #FF486B;
+    width: 100%;
+    position: absolute;
+    pointer-events: none;
 }
 
 sub {
