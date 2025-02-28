@@ -5,6 +5,7 @@ async function fetchCryptoData(coinId) {
         const response = await fetch(
             `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false`
         );
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
         const data = await response.json();
         return {
             name: data.name,
@@ -13,7 +14,7 @@ async function fetchCryptoData(coinId) {
             change24h: data.market_data.price_change_percentage_24h
         };
     } catch (error) {
-        console.error(`Error fetching data for ${coinId}:`, error);
+        console.error(`Failed to fetch ${coinId}: ${error.message}`);
         return null;
     }
 }
@@ -21,15 +22,14 @@ async function fetchCryptoData(coinId) {
 function updateWatchlistTable() {
     const tbody = document.getElementById('watchlistBody');
     tbody.innerHTML = '';
-
     watchlist.forEach((coin, index) => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${coin.name}</td>
-            <td>${coin.symbol}</td>
-            <td>$${coin.price.toFixed(2)}</td>
+            <td>${coin.name || 'Unknown'}</td>
+            <td>${coin.symbol || '?'}</td>
+            <td>$${coin.price ? coin.price.toFixed(2) : 'N/A'}</td>
             <td style="color: ${coin.change24h >= 0 ? 'green' : 'red'}">
-                ${coin.change24h.toFixed(2)}%
+                ${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%
             </td>
             <td>
                 <button class="remove-btn" onclick="removeCoin(${index})">Remove</button>
@@ -42,9 +42,8 @@ function updateWatchlistTable() {
 async function addCoin() {
     const input = document.getElementById('coinInput');
     const coinId = input.value.trim().toLowerCase();
-
     if (!coinId || watchlist.some(coin => coin.id === coinId)) {
-        alert('Please enter a valid coin ID or it already exists in the watchlist!');
+        alert('Please enter a valid coin ID or it already exists!');
         return;
     }
 
@@ -55,7 +54,7 @@ async function addCoin() {
         updateWatchlistTable();
         input.value = '';
     } else {
-        alert('Coin not found! Try IDs like: bitcoin, ethereum, dogecoin');
+        alert('Coin not found! Try: bitcoin, eth, dogecoin');
     }
 }
 
@@ -64,16 +63,16 @@ function removeCoin(index) {
     updateWatchlistTable();
 }
 
-// Refresh prices every 30 seconds without losing coins
+// Refresh prices every 30 seconds, preserving coins
 setInterval(async () => {
+    console.log('Refreshing watchlist...');
     for (let i = 0; i < watchlist.length; i++) {
-        const updatedCoin = await fetchCryptoData(watchlist[i].id);
+        const coin = watchlist[i];
+        const updatedCoin = await fetchCryptoData(coin.id);
         if (updatedCoin) {
-            // Update only the price and change, keep the ID
-            watchlist[i].price = updatedCoin.price;
-            watchlist[i].change24h = updatedCoin.change24h;
+            watchlist[i] = { ...coin, price: updatedCoin.price, change24h: updatedCoin.change24h };
         } else {
-            console.log(`Failed to update ${watchlist[i].id}, keeping old data`);
+            console.log(`Keeping old data for ${coin.id}`);
         }
     }
     updateWatchlistTable();
