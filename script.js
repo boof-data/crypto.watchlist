@@ -1,8 +1,12 @@
-let watchlist = [];
+let customWatchlist = [];
+let trendingCrypto = [];
+let trendingETH = [];
+let trendingSOL = [];
 let coinList = [];
 let coinCache = new Map();
 let requestQueue = Promise.resolve();
 let lastUpdate = 0;
+let activeTrendingTab = 'crypto';
 
 async function fetchCoinList() {
     try {
@@ -11,23 +15,6 @@ async function fetchCoinList() {
             coinList = await response.json();
             console.log('Full coin list fetched:', coinList.slice(0, 5));
         }
-        // Pre-fetch top 500 for thumbnails and initial data
-        const responses = await Promise.all([
-            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
-            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
-        ]);
-        const data = await Promise.all(responses.map(res => res.json()));
-        const markets = [].concat(...data);
-        markets.forEach(coin => coinCache.set(coin.id, {
-            name: coin.name,
-            symbol: coin.symbol.toUpperCase(),
-            price: coin.current_price,
-            change24h: coin.price_change_percentage_24h,
-            marketCap: coin.market_cap,
-            sparkline: coin.sparkline_in_7d.price.slice(-24),
-            image: coin.image
-        }));
-        console.log('Markets fetched (500 coins):', markets.slice(0, 5));
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
     }
@@ -37,11 +24,11 @@ async function fetchCryptoData(coinId) {
     if (coinCache.has(coinId)) {
         const cached = coinCache.get(coinId);
         const now = Date.now();
-        if (now - (cached.lastFetched || 0) < 60000) return cached; // Cache valid for 60s
+        if (now - (cached.lastFetched || 0) < 60000) return cached;
     }
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
-            await new Promise(resolve => setTimeout(resolve, 250)); // Lighter delay
+            await new Promise(resolve => setTimeout(resolve, 250));
             try {
                 const response = await fetch(
                     `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
@@ -49,6 +36,7 @@ async function fetchCryptoData(coinId) {
                 if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
                 const data = await response.json();
                 const coinData = {
+                    id: data.id,
                     name: data.name,
                     symbol: data.symbol.toUpperCase(),
                     price: data.market_data.current_price.usd,
@@ -62,15 +50,27 @@ async function fetchCryptoData(coinId) {
                 resolve(coinData);
             } catch (error) {
                 console.error(`Failed to fetch ${coinId}: ${error.message}`);
-                const fallback = coinList.find(coin => coin.id === coinId);
-                if (fallback && coinCache.has(coinId)) {
-                    resolve(coinCache.get(coinId));
-                } else {
-                    resolve(null);
-                }
+                const cached = coinCache.get(coinId);
+                resolve(cached || null);
             }
         });
     });
+}
+
+async function fetchTrendingWatchlists() {
+    try {
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
+        const coins = await response.json();
+        trendingCrypto = coins.slice(0, 10); // Top 10 by market cap
+        trendingETH = coins.filter(coin => coin.platforms && coin.platforms.ethereum).slice(0, 10);
+        trendingSOL = coins.filter(coin => coin.platforms && coin.platforms.solana).slice(0, 10);
+        trendingCrypto.forEach(coin => coinCache.set(coin.id, coin));
+        trendingETH.forEach(coin => coinCache.set(coin.id, coin));
+        trendingSOL.forEach(coin => coinCache.set(coin.id, coin));
+        updateTrendingWatchlist();
+    } catch (error) {
+        console.error('Failed to fetch trending watchlists:', error);
+    }
 }
 
 function formatPrice(price) {
@@ -102,10 +102,10 @@ function drawMiniChart(canvas, sparkline, change24h) {
     ctx.stroke();
 }
 
-function updateWatchlistTable() {
-    const tbody = document.getElementById('watchlistBody');
+function updateCustomWatchlist() {
+    const tbody = document.getElementById('customWatchlistBody');
     tbody.innerHTML = '';
-    watchlist.forEach((coin, index) => {
+    customWatchlist.forEach((coin, index) => {
         const trendColor = coin.change24h >= 0 ? '#00CC00' : '#FF486B';
         const row = document.createElement('div');
         row.className = 'watchlist-row';
@@ -130,73 +130,97 @@ function updateWatchlistTable() {
         const canvas = row.querySelector('.trend-chart');
         drawMiniChart(canvas, coin.sparkline, coin.change24h);
     });
-    makeSortable();
-    saveWatchlist();
+    makeSortable(document.getElementById('customWatchlistBody'), customWatchlist, updateCustomWatchlist);
+    saveCustomWatchlist();
     lastUpdate = Date.now();
     document.getElementById('last-updated').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
 }
 
-const debouncedUpdate = debounce(updateWatchlistTable, 500);
+function updateTrendingWatchlist() {
+    const tbody = document.getElementById('trendingWatchlistBody');
+    tbody.innerHTML = '';
+    const activeList = activeTrendingTab === 'crypto' ? trendingCrypto : activeTrendingTab === 'eth' ? trendingETH : trendingSOL;
+    activeList.forEach((coin) => {
+        const trendColor = coin.change24h >= 0 ? '#00CC00' : '#FF486B';
+        const row = document.createElement('div');
+        row.className = 'watchlist-row';
+        row.innerHTML = `
+            <div>
+                <img src="${coin.image}" alt="${coin.name}" class="coin-logo">
+                ${coin.name || 'Unknown'}
+            </div>
+            <div>${coin.symbol || '?'}</div>
+            <div>${formatPrice(coin.price)}</div>
+            <div style="color: ${trendColor}">${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%</div>
+            <div>$${coin.marketCap ? coin.marketCap.toLocaleString() : 'N/A'}</div>
+            <div>
+                <canvas class="trend-chart" width="60" height="20"></canvas>
+            </div>
+        `;
+        tbody.appendChild(row);
+        const canvas = row.querySelector('.trend-chart');
+        drawMiniChart(canvas, coin.sparkline, coin.change24h);
+    });
+}
 
-function makeSortable() {
-    const tbody = document.getElementById('watchlistBody');
+const debouncedCustomUpdate = debounce(updateCustomWatchlist, 500);
+const debouncedTrendingUpdate = debounce(updateTrendingWatchlist, 500);
+
+function makeSortable(container, list, updateFunc) {
     let draggedItem = null;
     let dropIndicator = document.createElement('div');
     dropIndicator.className = 'drop-indicator';
 
-    tbody.addEventListener('dragstart', (e) => {
+    container.addEventListener('dragstart', (e) => {
         draggedItem = e.target.closest('.watchlist-row');
-        setTimeout(() => draggedItem.style.opacity = '0.5', 0);
+        if (draggedItem) setTimeout(() => draggedItem.style.opacity = '0.5', 0);
     });
 
-    tbody.addEventListener('dragend', () => {
+    container.addEventListener('dragend', () => {
+        if (!draggedItem) return;
         draggedItem.style.opacity = '1';
         dropIndicator.remove();
-        const newOrder = Array.from(tbody.children).map(row => {
-            return watchlist.find(coin => coin.id === row.dataset.coinId);
+        const newOrder = Array.from(container.children).map(row => {
+            const coinId = row.dataset.coinId;
+            return list.find(coin => coin.id === coinId);
         });
-        watchlist = newOrder.filter(coin => coin); // Remove any nulls
+        list.splice(0, list.length, ...newOrder.filter(coin => coin));
         draggedItem = null;
-        debouncedUpdate(); // Debounced to reduce DOM thrashing
+        debouncedCustomUpdate();
     });
 
-    tbody.addEventListener('dragover', (e) => {
+    container.addEventListener('dragover', (e) => {
         e.preventDefault();
+        if (!draggedItem) return;
         const target = e.target.closest('.watchlist-row');
-        if (draggedItem && draggedItem !== target) {
-            const allRows = Array.from(tbody.children);
-            if (!target) {
-                // Handle drop at the top
-                if (allRows.length > 0) {
-                    tbody.insertBefore(dropIndicator, allRows[0]);
-                }
+        const allRows = Array.from(container.children);
+        if (!target && allRows.length > 0) {
+            container.insertBefore(dropIndicator, allRows[0]);
+        } else if (target && draggedItem !== target) {
+            const targetRect = target.getBoundingClientRect();
+            const midPoint = targetRect.top + targetRect.height / 2;
+            if (e.clientY < midPoint) {
+                container.insertBefore(dropIndicator, target);
             } else {
-                const targetRect = target.getBoundingClientRect();
-                const midPoint = targetRect.top + targetRect.height / 2;
-                if (e.clientY < midPoint) {
-                    tbody.insertBefore(dropIndicator, target);
-                } else {
-                    target.after(dropIndicator);
-                }
+                target.after(dropIndicator);
             }
         }
     });
 
-    tbody.addEventListener('drop', (e) => {
+    container.addEventListener('drop', (e) => {
         e.preventDefault();
+        if (!draggedItem) return;
         const target = e.target.closest('.watchlist-row');
-        if (draggedItem) {
-            const allRows = Array.from(tbody.children);
-            if (!target && allRows.length > 0) {
-                tbody.insertBefore(draggedItem, allRows[0]); // Drop at top
-            } else if (target && draggedItem !== target) {
-                const draggedIndex = allRows.indexOf(draggedItem);
-                const targetIndex = allRows.indexOf(target);
-                if (draggedIndex < targetIndex) {
-                    target.after(draggedItem);
-                } else {
-                    target.before(draggedItem);
-                }
+        const allRows = Array.from(container.children);
+        if (!target && allRows.length > 0) {
+            container.insertBefore(draggedItem, allRows[0]);
+        } else if (target && draggedItem !== target) {
+            const draggedIndex = allRows.indexOf(draggedItem);
+            const targetIndex = allRows.indexOf(target);
+            if (draggedIndex < targetIndex) {
+                target.after(draggedItem);
+            } else {
+                target.before(draggedItem);
             }
         }
     });
@@ -254,7 +278,7 @@ async function addCoin(coinIdFromDropdown = null) {
     const dropdown = document.getElementById('suggestions');
     const addButton = document.querySelector('.watchlist-controls button');
 
-    if (!query || watchlist.some(coin => coin.id === query)) {
+    if (!query || customWatchlist.some(coin => coin.id === query)) {
         alert('Please enter a valid coin or it already exists!');
         return;
     }
@@ -292,8 +316,8 @@ async function addCoin(coinIdFromDropdown = null) {
         const coinData = await fetchCryptoData(coinId);
         if (coinData) {
             coinData.id = coinId;
-            watchlist.push(coinData);
-            updateWatchlistTable();
+            customWatchlist.push(coinData);
+            updateCustomWatchlist();
             input.value = '';
             dropdown.innerHTML = '';
         } else {
@@ -309,26 +333,26 @@ async function addCoin(coinIdFromDropdown = null) {
 }
 
 function removeCoin(index) {
-    watchlist.splice(index, 1);
-    updateWatchlistTable();
+    customWatchlist.splice(index, 1);
+    updateCustomWatchlist();
 }
 
-function saveWatchlist() {
-    localStorage.setItem('cryptoWatchlist', JSON.stringify(watchlist.map(coin => coin.id)));
+function saveCustomWatchlist() {
+    localStorage.setItem('customWatchlist', JSON.stringify(customWatchlist.map(coin => coin.id)));
 }
 
-async function loadWatchlist() {
-    const savedIds = JSON.parse(localStorage.getItem('cryptoWatchlist') || '[]');
+async function loadCustomWatchlist() {
+    const savedIds = JSON.parse(localStorage.getItem('customWatchlist') || '[]');
     if (savedIds.length > 0) {
-        watchlist = [];
+        customWatchlist = [];
         for (const id of savedIds) {
             const coinData = await fetchCryptoData(id);
             if (coinData) {
                 coinData.id = id;
-                watchlist.push(coinData);
+                customWatchlist.push(coinData);
             }
         }
-        updateWatchlistTable();
+        updateCustomWatchlist();
     }
 }
 
@@ -340,20 +364,16 @@ function debounce(func, wait) {
     };
 }
 
-fetchCoinList().then(() => loadWatchlist());
+fetchCoinList().then(() => {
+    loadCustomWatchlist();
+    fetchTrendingWatchlists();
+});
 
 setInterval(async () => {
     const now = Date.now();
-    if (now - lastUpdate < 60000) return; // Skip if updated recently
-    console.log('Refreshing watchlist...');
-    for (let i = 0; i < watchlist.length; i++) {
-        const coin = watchlist[i];
-        const updatedCoin = await fetchCryptoData(coin.id);
-        if (updatedCoin) {
-            watchlist[i] = { ...coin, ...updatedCoin };
-        }
-    }
-    debouncedUpdate();
+    if (now - lastUpdate < 60000) return;
+    console.log('Refreshing trending watchlists...');
+    await fetchTrendingWatchlists();
 }, 60000);
 
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {
@@ -363,5 +383,15 @@ document.getElementById('coinInput').addEventListener('input', debounce((e) => {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('theme-toggle').addEventListener('click', () => {
         document.body.classList.toggle('light-theme');
+    });
+
+    const tabs = document.querySelectorAll('.trending-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            tabs.forEach(t => t.classList.remove('active'));
+            e.target.classList.add('active');
+            activeTrendingTab = e.target.dataset.tab;
+            updateTrendingWatchlist();
+        });
     });
 });

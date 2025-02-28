@@ -15,21 +15,43 @@
         </div>
     </div>
     <div class="container">
-        <div class="watchlist-controls">
-            <input type="text" id="coinInput" placeholder="Search coins or contract address (e.g., BTC, 0x...)">
-            <div id="suggestions" class="dropdown"></div>
-            <button onclick="addCoin()">Add to Watchlist</button>
-        </div>
-        <div class="watchlist">
-            <div class="table-header">
-                <span>Coin</span>
-                <span>Symbol</span>
-                <span>Price (USD)</span>
-                <span>24h Change</span>
-                <span>Market Cap (USD)</span>
-                <span>24h Trend</span>
+        <div class="watchlist-section">
+            <h2>Custom Watchlist</h2>
+            <div class="watchlist-controls">
+                <input type="text" id="coinInput" placeholder="Search coins or contract address (e.g., BTC, 0x...)">
+                <div id="suggestions" class="dropdown"></div>
+                <button onclick="addCoin()">Add to Watchlist</button>
             </div>
-            <div id="watchlistBody" class="watchlist-body"></div>
+            <div class="watchlist">
+                <div class="table-header">
+                    <span>Coin</span>
+                    <span>Symbol</span>
+                    <span>Price (USD)</span>
+                    <span>24h Change</span>
+                    <span>Market Cap (USD)</span>
+                    <span>24h Trend</span>
+                </div>
+                <div id="customWatchlistBody" class="watchlist-body"></div>
+            </div>
+        </div>
+        <div class="watchlist-section">
+            <h2>Trending Watchlists</h2>
+            <div class="trending-controls">
+                <button class="trending-tab active" data-tab="crypto">Top Crypto</button>
+                <button class="trending-tab" data-tab="eth">ETH Tokens</button>
+                <button class="trending-tab" data-tab="sol">SOL Tokens</button>
+            </div>
+            <div class="watchlist">
+                <div class="table-header">
+                    <span>Coin</span>
+                    <span>Symbol</span>
+                    <span>Price (USD)</span>
+                    <span>24h Change</span>
+                    <span>Market Cap (USD)</span>
+                    <span>24h Trend</span>
+                </div>
+                <div id="trendingWatchlistBody" class="watchlist-body"></div>
+            </div>
         </div>
     </div>
     <script src="script.js"></script>
