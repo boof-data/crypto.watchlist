@@ -1,6 +1,6 @@
 let watchlist = [];
 let coinList = [];
-let coinCache = new Map(); // Cache for fetched coin data
+let coinCache = new Map();
 
 async function fetchCoinList() {
     try {
@@ -13,12 +13,28 @@ async function fetchCoinList() {
 }
 
 async function fetchCryptoData(coinId) {
-    if (coinCache.has(coinId)) return coinCache.get(coinId); // Use cached data if available
+    if (coinCache.has(coinId)) return coinCache.get(coinId);
     try {
         const response = await fetch(
             `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
         );
-        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        if (!response.ok) {
+            console.warn(`Falling back to coinList for ${coinId}`);
+            const fallback = coinList.find(coin => coin.id === coinId);
+            if (fallback) {
+                return {
+                    id: fallback.id,
+                    name: fallback.name,
+                    symbol: fallback.symbol.toUpperCase(),
+                    price: fallback.current_price,
+                    change24h: fallback.price_change_percentage_24h,
+                    marketCap: fallback.market_cap,
+                    sparkline: fallback.sparkline_in_7d.price.slice(-24),
+                    image: fallback.image
+                };
+            }
+            throw new Error(`HTTP error: ${response.status}`);
+        }
         const data = await response.json();
         const coinData = {
             name: data.name,
@@ -29,7 +45,7 @@ async function fetchCryptoData(coinId) {
             sparkline: data.market_data.sparkline_7d.price.slice(-24),
             image: data.image.thumb
         };
-        coinCache.set(coinId, coinData); // Cache the result
+        coinCache.set(coinId, coinData);
         return coinData;
     } catch (error) {
         console.error(`Failed to fetch ${coinId}: ${error.message}`);
@@ -44,7 +60,7 @@ function drawMiniChart(canvas, sparkline, change24h) {
     ctx.clearRect(0, 0, width, height);
     const maxPrice = Math.max(...sparkline);
     const minPrice = Math.min(...sparkline);
-    const scaleY = (height - 2) / (maxPrice - minPrice || 1); // Avoid division by 0
+    const scaleY = (height - 2) / (maxPrice - minPrice || 1);
     ctx.beginPath();
     ctx.strokeStyle = change24h >= 0 ? '#00cc00' : '#ff4444';
     ctx.lineWidth = 1;
@@ -80,6 +96,7 @@ function updateWatchlistTable() {
         const canvas = row.querySelector('.trend-chart');
         drawMiniChart(canvas, coin.sparkline, coin.change24h);
     });
+    saveWatchlist(); // Save after every update
 }
 
 function rankSuggestions(input) {
@@ -112,7 +129,7 @@ function showSuggestions(input) {
     matches.forEach(coin => {
         const option = document.createElement('div');
         option.innerHTML = `
-            <img src="${coin.image.thumb}" alt="${coin.name}" class="dropdown-logo">
+            <img src="${coin.image}" alt="${coin.name}" class="dropdown-logo">
             ${coin.name} (${coin.symbol.toUpperCase()})
         `;
         option.className = 'suggestion';
@@ -140,7 +157,7 @@ async function addCoin() {
         coin.id === query || coin.symbol.toLowerCase() === query || coin.name.toLowerCase() === query
     );
     if (!exactMatch) {
-        alert('Coin not found! Try: BTC, ETH, bitcoin');
+        alert('Coin not found! Try: BTC, ETH, pepe');
         return;
     }
     const coinId = exactMatch.id;
@@ -173,7 +190,25 @@ function removeCoin(index) {
     updateWatchlistTable();
 }
 
-// Debounce utility
+function saveWatchlist() {
+    localStorage.setItem('cryptoWatchlist', JSON.stringify(watchlist.map(coin => coin.id)));
+}
+
+async function loadWatchlist() {
+    const savedIds = JSON.parse(localStorage.getItem('cryptoWatchlist') || '[]');
+    if (savedIds.length > 0) {
+        watchlist = [];
+        for (const id of savedIds) {
+            const coinData = await fetchCryptoData(id);
+            if (coinData) {
+                coinData.id = id;
+                watchlist.push(coinData);
+            }
+        }
+        updateWatchlistTable();
+    }
+}
+
 function debounce(func, wait) {
     let timeout;
     return function (...args) {
@@ -182,7 +217,7 @@ function debounce(func, wait) {
     };
 }
 
-fetchCoinList();
+fetchCoinList().then(() => loadWatchlist());
 
 setInterval(async () => {
     console.log('Refreshing watchlist...');
