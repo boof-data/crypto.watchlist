@@ -15,6 +15,23 @@ async function fetchCoinList() {
             coinList = await response.json();
             console.log('Full coin list fetched:', coinList.slice(0, 5));
         }
+        // Pre-fetch top 500 for thumbnails and initial data
+        const responses = await Promise.all([
+            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
+            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
+        ]);
+        const data = await Promise.all(responses.map(res => res.json()));
+        const markets = [].concat(...data);
+        markets.forEach(coin => coinCache.set(coin.id, {
+            name: coin.name,
+            symbol: coin.symbol.toUpperCase(),
+            price: coin.current_price,
+            change24h: coin.price_change_percentage_24h,
+            marketCap: coin.market_cap,
+            sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+            image: coin.image
+        }));
+        console.log('Markets fetched (500 coins):', markets.slice(0, 5));
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
     }
@@ -42,7 +59,7 @@ async function fetchCryptoData(coinId) {
                     price: data.market_data.current_price.usd,
                     change24h: data.market_data.price_change_percentage_24h,
                     marketCap: data.market_data.market_cap.usd,
-                    sparkline: data.market_data.sparkline_7d.price.slice(-24),
+                    sparkline: data.market_data.sparkline_7d ? data.market_data.sparkline_7d.price.slice(-24) : [],
                     image: data.image.thumb,
                     lastFetched: Date.now()
                 };
@@ -61,12 +78,22 @@ async function fetchTrendingWatchlists() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
         const coins = await response.json();
-        trendingCrypto = coins.slice(0, 10); // Top 10 by market cap
-        trendingETH = coins.filter(coin => coin.platforms && coin.platforms.ethereum).slice(0, 10);
-        trendingSOL = coins.filter(coin => coin.platforms && coin.platforms.solana).slice(0, 10);
-        trendingCrypto.forEach(coin => coinCache.set(coin.id, coin));
-        trendingETH.forEach(coin => coinCache.set(coin.id, coin));
-        trendingSOL.forEach(coin => coinCache.set(coin.id, coin));
+        trendingCrypto = coins.slice(0, 10); // Top 10 overall
+        trendingETH = coinList
+            .filter(coin => coin.platforms && coin.platforms.ethereum)
+            .map(coin => coinCache.get(coin.id) || coin)
+            .filter(coin => coin && coin.marketCap)
+            .sort((a, b) => b.marketCap - a.marketCap)
+            .slice(0, 10);
+        trendingSOL = coinList
+            .filter(coin => coin.platforms && coin.platforms.solana)
+            .map(coin => coinCache.get(coin.id) || coin)
+            .filter(coin => coin && coin.marketCap)
+            .sort((a, b) => b.marketCap - a.marketCap)
+            .slice(0, 10);
+        trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+        trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+        trendingSOL.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
         updateTrendingWatchlist();
     } catch (error) {
         console.error('Failed to fetch trending watchlists:', error);
@@ -87,7 +114,7 @@ function drawMiniChart(canvas, sparkline, change24h) {
     const width = canvas.width = 60;
     const height = canvas.height = 20;
     ctx.clearRect(0, 0, width, height);
-    if (!sparkline.length) return;
+    if (!sparkline || !sparkline.length) return;
     const maxPrice = Math.max(...sparkline);
     const minPrice = Math.min(...sparkline);
     const scaleY = (height - 2) / (maxPrice - minPrice || 1);
@@ -140,7 +167,7 @@ function updateTrendingWatchlist() {
     const tbody = document.getElementById('trendingWatchlistBody');
     tbody.innerHTML = '';
     const activeList = activeTrendingTab === 'crypto' ? trendingCrypto : activeTrendingTab === 'eth' ? trendingETH : trendingSOL;
-    activeList.forEach((coin) => {
+    activeList.slice(0, 10).forEach((coin) => {
         const trendColor = coin.change24h >= 0 ? '#00CC00' : '#FF486B';
         const row = document.createElement('div');
         row.className = 'watchlist-row';
@@ -186,7 +213,7 @@ function makeSortable(container, list, updateFunc) {
         });
         list.splice(0, list.length, ...newOrder.filter(coin => coin));
         draggedItem = null;
-        debouncedCustomUpdate();
+        updateFunc();
     });
 
     container.addEventListener('dragover', (e) => {
@@ -258,7 +285,7 @@ function showSuggestions(input) {
         const cachedCoin = coinCache.get(coin.id) || coin;
         const option = document.createElement('div');
         option.innerHTML = `
-            <img src="${cachedCoin.image || 'https://via.placeholder.com/24'}" alt="${coin.name}" class="dropdown-logo">
+            <img src="${cachedCoin.image || 'https://placehold.co/24x24'}" alt="${coin.name}" class="dropdown-logo">
             ${coin.name} (${coin.symbol.toUpperCase()})
         `;
         option.className = 'suggestion';
@@ -342,7 +369,16 @@ function saveCustomWatchlist() {
 }
 
 async function loadCustomWatchlist() {
-    const savedIds = JSON.parse(localStorage.getItem('customWatchlist') || '[]');
+    let savedIds = JSON.parse(localStorage.getItem('customWatchlist') || '[]');
+    if (savedIds.length === 0) {
+        // Migrate from old key if present
+        savedIds = JSON.parse(localStorage.getItem('cryptoWatchlist') || '[]');
+        if (savedIds.length > 0) {
+            console.log('Migrating old watchlist data...');
+            localStorage.setItem('customWatchlist', JSON.stringify(savedIds));
+            localStorage.removeItem('cryptoWatchlist');
+        }
+    }
     if (savedIds.length > 0) {
         customWatchlist = [];
         for (const id of savedIds) {
