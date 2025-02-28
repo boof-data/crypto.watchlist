@@ -1,7 +1,6 @@
 let watchlist = [];
-let coinList = []; // Cache of all coins for ticker/name lookup
+let coinList = [];
 
-// Fetch the full coin list once on load
 async function fetchCoinList() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/list');
@@ -59,7 +58,7 @@ function showSuggestions(input) {
         coin.id.includes(input) || 
         coin.symbol.toLowerCase().includes(input) || 
         coin.name.toLowerCase().includes(input)
-    ).slice(0, 5); // Limit to 5 suggestions
+    ).slice(0, 5);
 
     matches.forEach(coin => {
         const option = document.createElement('div');
@@ -82,7 +81,6 @@ async function addCoin() {
         return;
     }
 
-    // Try exact ID first, then ticker/name lookup
     let coinId = query;
     if (!coinList.some(coin => coin.id === query)) {
         const match = coinList.find(coin => 
@@ -108,10 +106,8 @@ function removeCoin(index) {
     updateWatchlistTable();
 }
 
-// Load coin list on startup
 fetchCoinList();
 
-// Refresh prices every 30 seconds
 setInterval(async () => {
     console.log('Refreshing watchlist...');
     for (let i = 0; i < watchlist.length; i++) {
@@ -124,7 +120,6 @@ setInterval(async () => {
     updateWatchlistTable();
 }, 30000);
 
-// Input listener for suggestions
 document.getElementById('coinInput').addEventListener('input', (e) => {
     showSuggestions(e.target.value.toLowerCase());
 });
