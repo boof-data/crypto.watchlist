@@ -15,7 +15,6 @@ async function fetchCoinList() {
             coinList = await response.json();
             console.log('Full coin list fetched:', coinList.slice(0, 5));
         }
-        // Pre-fetch top 500 for thumbnails and initial data
         const responses = await Promise.all([
             fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
             fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
@@ -78,19 +77,42 @@ async function fetchTrendingWatchlists() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
         const coins = await response.json();
-        trendingCrypto = coins.slice(0, 10); // Top 10 overall
-        trendingETH = coinList
-            .filter(coin => coin.platforms && coin.platforms.ethereum)
-            .map(coin => coinCache.get(coin.id) || coin)
-            .filter(coin => coin && coin.marketCap)
-            .sort((a, b) => b.marketCap - a.marketCap)
-            .slice(0, 10);
-        trendingSOL = coinList
-            .filter(coin => coin.platforms && coin.platforms.solana)
-            .map(coin => coinCache.get(coin.id) || coin)
-            .filter(coin => coin && coin.marketCap)
-            .sort((a, b) => b.marketCap - a.marketCap)
-            .slice(0, 10);
+        trendingCrypto = coins.slice(0, 10).map(coin => ({
+            id: coin.id,
+            name: coin.name,
+            symbol: coin.symbol.toUpperCase(),
+            price: coin.current_price,
+            change24h: coin.price_change_percentage_24h,
+            marketCap: coin.market_cap,
+            sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+            image: coin.image
+        }));
+        trendingETH = coins
+            .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.ethereum))
+            .slice(0, 10)
+            .map(coin => ({
+                id: coin.id,
+                name: coin.name,
+                symbol: coin.symbol.toUpperCase(),
+                price: coin.current_price,
+                change24h: coin.price_change_percentage_24h,
+                marketCap: coin.market_cap,
+                sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+                image: coin.image
+            }));
+        trendingSOL = coins
+            .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.solana))
+            .slice(0, 10)
+            .map(coin => ({
+                id: coin.id,
+                name: coin.name,
+                symbol: coin.symbol.toUpperCase(),
+                price: coin.current_price,
+                change24h: coin.price_change_percentage_24h,
+                marketCap: coin.market_cap,
+                sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+                image: coin.image
+            }));
         trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
         trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
         trendingSOL.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
@@ -258,11 +280,13 @@ function rankSuggestions(input) {
     const lowerInput = input.toLowerCase();
     return coinList
         .map(coin => {
-            const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 3 : coin.symbol.toLowerCase().includes(lowerInput) ? 1 : 0;
-            const nameMatch = coin.name.toLowerCase() === lowerInput ? 2 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
+            const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 5 : coin.symbol.toLowerCase().includes(lowerInput) ? 2 : 0;
+            const nameMatch = coin.name.toLowerCase() === lowerInput ? 4 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
-            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 3 : 0;
-            const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch);
+            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 6 : 0;
+            const cached = coinCache.get(coin.id);
+            const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0; // Boost popular coins
+            const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
@@ -313,31 +337,33 @@ async function addCoin(coinIdFromDropdown = null) {
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
 
-    const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
-    let coinId = query;
-    if (isContract) {
-        const coin = coinList.find(c => c.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === query));
-        if (coin) {
-            coinId = coin.id;
-            console.log(`Matched contract ${query} to ${coin.name} (${coin.id})`);
+    let coinId = coinIdFromDropdown; // Use dropdown ID directly if provided
+    if (!coinId) {
+        const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
+        if (isContract) {
+            const coin = coinList.find(c => c.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === query));
+            if (coin) {
+                coinId = coin.id;
+                console.log(`Matched contract ${query} to ${coin.name} (${coin.id})`);
+            } else {
+                alert('Contract not found! Ensure the address is correct.');
+                addButton.disabled = false;
+                addButton.textContent = 'Add to Watchlist';
+                return;
+            }
         } else {
-            alert('Contract not found! Ensure the address is correct.');
-            addButton.disabled = false;
-            addButton.textContent = 'Add to Watchlist';
-            return;
+            const exactMatch = coinList.find(coin =>
+                coin.id === query || coin.symbol.toLowerCase() === query || coin.name.toLowerCase() === query
+            );
+            if (!exactMatch) {
+                alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
+                addButton.disabled = false;
+                addButton.textContent = 'Add to Watchlist';
+                return;
+            }
+            coinId = exactMatch.id;
         }
     }
-
-    const exactMatch = coinList.find(coin =>
-        coin.id === coinId || coin.symbol.toLowerCase() === coinId || coin.name.toLowerCase() === coinId
-    );
-    if (!exactMatch) {
-        alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
-        addButton.disabled = false;
-        addButton.textContent = 'Add to Watchlist';
-        return;
-    }
-    coinId = exactMatch.id;
 
     try {
         const coinData = await fetchCryptoData(coinId);
@@ -371,7 +397,6 @@ function saveCustomWatchlist() {
 async function loadCustomWatchlist() {
     let savedIds = JSON.parse(localStorage.getItem('customWatchlist') || '[]');
     if (savedIds.length === 0) {
-        // Migrate from old key if present
         savedIds = JSON.parse(localStorage.getItem('cryptoWatchlist') || '[]');
         if (savedIds.length > 0) {
             console.log('Migrating old watchlist data...');
