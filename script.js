@@ -13,7 +13,7 @@ async function fetchCryptoData(coinId) {
             change24h: data.market_data.price_change_percentage_24h
         };
     } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error(`Error fetching data for ${coinId}:`, error);
         return null;
     }
 }
@@ -50,7 +50,7 @@ async function addCoin() {
 
     const coinData = await fetchCryptoData(coinId);
     if (coinData) {
-        coinData.id = coinId; // Store the ID for reference
+        coinData.id = coinId;
         watchlist.push(coinData);
         updateWatchlistTable();
         input.value = '';
@@ -64,13 +64,17 @@ function removeCoin(index) {
     updateWatchlistTable();
 }
 
-// Refresh prices every 30 seconds
+// Refresh prices every 30 seconds without losing coins
 setInterval(async () => {
-    const updatedWatchlist = [];
-    for (const coin of watchlist) {
-        const updatedCoin = await fetchCryptoData(coin.id);
-        if (updatedCoin) updatedWatchlist.push({ ...updatedCoin, id: coin.id });
+    for (let i = 0; i < watchlist.length; i++) {
+        const updatedCoin = await fetchCryptoData(watchlist[i].id);
+        if (updatedCoin) {
+            // Update only the price and change, keep the ID
+            watchlist[i].price = updatedCoin.price;
+            watchlist[i].change24h = updatedCoin.change24h;
+        } else {
+            console.log(`Failed to update ${watchlist[i].id}, keeping old data`);
+        }
     }
-    watchlist = updatedWatchlist;
     updateWatchlistTable();
 }, 30000);
