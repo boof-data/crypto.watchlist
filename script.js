@@ -73,6 +73,27 @@ async function fetchCryptoData(coinId) {
     });
 }
 
+async function fetchRealTimePrices() {
+    if (!watchlist.length) return;
+    const ids = watchlist.map(coin => coin.id).join(',');
+    try {
+        const response = await fetch(
+            `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`
+        );
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        const data = await response.json();
+        watchlist.forEach(coin => {
+            if (data[coin.id]) {
+                coin.price = data[coin.id].usd;
+                coin.change24h = data[coin.id].usd_24h_change;
+            }
+        });
+        updateWatchlistTable();
+    } catch (error) {
+        console.error('Failed to fetch real-time prices:', error);
+    }
+}
+
 async function fetchCoinByContract(platform, address) {
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
@@ -123,7 +144,7 @@ function drawMiniChart(canvas, sparkline, change24h) {
     const minPrice = Math.min(...sparkline);
     const scaleY = (height - 2) / (maxPrice - minPrice || 1);
     ctx.beginPath();
-    ctx.strokeStyle = change24h >= 0 ? '#00CC00' : '#FF486B'; // Green for gains
+    ctx.strokeStyle = change24h >= 0 ? '#00CC00' : '#FF486B';
     ctx.lineWidth = 1;
     sparkline.forEach((price, i) => {
         const x = (i / (sparkline.length - 1)) * (width - 1);
@@ -357,17 +378,8 @@ function debounce(func, wait) {
 
 fetchCoinList().then(() => loadWatchlist());
 
-setInterval(async () => {
-    console.log('Refreshing watchlist...');
-    for (let i = 0; i < watchlist.length; i++) {
-        const coin = watchlist[i];
-        const updatedCoin = await fetchCryptoData(coin.id);
-        if (updatedCoin) {
-            watchlist[i] = { ...coin, ...updatedCoin };
-        }
-    }
-    updateWatchlistTable();
-}, 30000);
+// Real-time price updates every 10 seconds
+setInterval(fetchRealTimePrices, 10000);
 
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {
     showSuggestions(e.target.value.toLowerCase());
