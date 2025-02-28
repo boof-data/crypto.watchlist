@@ -3,8 +3,8 @@ let coinList = [];
 
 async function fetchCoinList() {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/list');
-        coinList = await response.json();
+        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false');
+        coinList = await response.json(); // Use /markets endpoint for market cap data
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
     }
@@ -21,7 +21,8 @@ async function fetchCryptoData(coinId) {
             name: data.name,
             symbol: data.symbol.toUpperCase(),
             price: data.market_data.current_price.usd,
-            change24h: data.market_data.price_change_percentage_24h
+            change24h: data.market_data.price_change_percentage_24h,
+            marketCap: data.market_data.market_cap.usd
         };
     } catch (error) {
         console.error(`Failed to fetch ${coinId}: ${error.message}`);
@@ -41,6 +42,7 @@ function updateWatchlistTable() {
             <td style="color: ${coin.change24h >= 0 ? 'green' : 'red'}">
                 ${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%
             </td>
+            <td>$${coin.marketCap ? coin.marketCap.toLocaleString() : 'N/A'}</td>
             <td>
                 <button class="remove-btn" onclick="removeCoin(${index})">Remove</button>
             </td>
@@ -61,7 +63,11 @@ function rankSuggestions(input) {
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
-        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+        .sort((a, b) => {
+            // Sort by market cap descending first, then by score, then alphabetically
+            const capDiff = (b.market_cap || 0) - (a.market_cap || 0);
+            return capDiff !== 0 ? capDiff : b.score - a.score || a.name.localeCompare(b.name);
+        })
         .slice(0, 5);
 }
 
@@ -114,20 +120,25 @@ async function addCoin() {
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
 
-    const coinData = await fetchCryptoData(coinId);
-    if (coinData) {
-        coinData.id = coinId;
-        watchlist.push(coinData);
-        updateWatchlistTable();
-        input.value = '';
-        dropdown.innerHTML = '';
-    } else {
-        alert('Failed to fetch coin data. Try again.');
+    try {
+        const coinData = await fetchCryptoData(coinId);
+        if (coinData) {
+            coinData.id = coinId;
+            watchlist.push(coinData);
+            updateWatchlistTable();
+            input.value = '';
+            dropdown.innerHTML = '';
+        } else {
+            alert('Failed to fetch coin data. Try again.');
+        }
+    } catch (error) {
+        console.error('Error adding coin:', error);
+        alert('An error occurred while adding the coin.');
+    } finally {
+        // Reset button state regardless of success or failure
+        addButton.disabled = false;
+        addButton.textContent = 'Add to Watchlist';
     }
-
-    // Reset button
-    addButton.disabled = false;
-    addButton.textContent = 'Add to Watchlist';
 }
 
 function removeCoin(index) {
@@ -143,7 +154,7 @@ setInterval(async () => {
         const coin = watchlist[i];
         const updatedCoin = await fetchCryptoData(coin.id);
         if (updatedCoin) {
-            watchlist[i] = { ...coin, price: updatedCoin.price, change24h: updatedCoin.change24h };
+            watchlist[i] = { ...coin, price: updatedCoin.price, change24h: updatedCoin.change24h, marketCap: updatedCoin.marketCap };
         }
     }
     updateWatchlistTable();
