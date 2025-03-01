@@ -12,18 +12,28 @@ const HELIUS_API_KEY = 'c5bf60fd-ad6d-4c08-ae51-ad352574cfaf';
 const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-async function queueFetch(url) {
+async function queueFetch(url, retries = 3) {
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
             await new Promise(res => setTimeout(res, 250)); // 250ms delay (~4 reqs/sec)
-            try {
-                const response = await fetch(`${COINGECKO_PROXY}${encodeURIComponent(url)}`);
-                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-                const data = await response.json();
-                resolve(data);
-            } catch (error) {
-                console.error(`Failed to fetch ${url}:`, error);
-                resolve(null);
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(`${COINGECKO_PROXY}${encodeURIComponent(url)}`);
+                    if (!response.ok) {
+                        if (response.status === 429) {
+                            console.warn(`Rate limit hit for ${url}, retrying (${i+1}/${retries})...`);
+                            await new Promise(res => setTimeout(res, 1000 * (i + 1))); // Exponential backoff
+                            continue;
+                        }
+                        throw new Error(`HTTP error: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    resolve(data);
+                    return;
+                } catch (error) {
+                    console.error(`Failed to fetch ${url} (attempt ${i+1}/${retries}):`, error);
+                    if (i === retries - 1) resolve(null);
+                }
             }
         });
     });
@@ -78,9 +88,11 @@ async function fetchCryptoData(coinId) {
             lastFetched: Date.now()
         };
         coinCache.set(coinId, coinData);
+        setCachedData(`coin_${coinId}`, coinData); // Cache individual coins
         return coinData;
     }
-    return null;
+    const cached = getCachedData(`coin_${coinId}`);
+    return cached || null;
 }
 
 async function fetchTrendingWatchlists() {
@@ -185,14 +197,22 @@ async function fetchHeaderPrices() {
             return;
         }
         const data = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd');
-        if (data) {
+        if (data && data.bitcoin && data.ethereum && data.solana) {
             document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
             document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
             document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
             setCachedData('headerPrices', data);
+        } else {
+            console.warn('Header prices fetch returned incomplete data, using defaults');
+            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $--`;
+            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $--`;
+            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $--`;
         }
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
+        document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $--`;
+        document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $--`;
+        document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $--`;
     }
 }
 
@@ -210,7 +230,7 @@ async function fetchSolanaBalances(address) {
         let solPriceData = cachedSolPrice;
         if (!solPriceData) {
             solPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-            setCachedData('solPrice', solPriceData);
+            if (solPriceData) setCachedData('solPrice', solPriceData);
         }
         let totalValue = solValue * (solPriceData?.solana?.usd || 0);
 
@@ -260,7 +280,7 @@ async function fetchXRPBalances(address) {
                 let xrpPriceData = cachedXrpPrice;
                 if (!xrpPriceData) {
                     xrpPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
-                    setCachedData('xrpPrice', xrpPriceData);
+                    if (xrpPriceData) setCachedData('xrpPrice', xrpPriceData);
                 }
                 totalValue += xrpValue * (xrpPriceData?.ripple?.usd || 0);
                 ws.close();
@@ -289,7 +309,6 @@ async function updatePortfolio() {
         localStorage.setItem('xrpWallet', xrpWallet);
         totalValue += await fetchXRPBalances(xrpWallet);
     }
-
     document.getElementById('portfolio-value').textContent = `$${totalValue.toFixed(2)}`;
 }
 
@@ -307,7 +326,7 @@ async function initPage() {
     await loadCustomWatchlist();
     await fetchFearAndGreed();
     loadSavedWallets();
-    setTimeout(updatePortfolio, 1000); // Defer portfolio update
+    setTimeout(updatePortfolio, 2000); // Defer portfolio update further
 }
 
 function formatMarketCap(marketCap) {
@@ -385,6 +404,7 @@ function updateTrendingWatchlist() {
     const tbody = document.getElementById('trendingWatchlistBody');
     tbody.innerHTML = '';
     const activeList = activeTrendingTab === 'crypto' ? trendingCrypto : activeTrendingTab === 'eth' ? trendingETH : trendingSOL;
+    if (!activeList || !activeList.length) return;
     activeList.slice(0, 10).forEach((coin) => {
         const trendColor = coin.change24h >= 0 ? '#00CC00' : '#FF486B';
         const row = document.createElement('div');
@@ -589,6 +609,7 @@ function removeCoin(index) {
 
 function saveCustomWatchlist() {
     localStorage.setItem('customWatchlist', JSON.stringify(customWatchlist.map(coin => coin.id)));
+    customWatchlist.forEach(coin => setCachedData(`coin_${coin.id}`, coin)); // Cache full coin data
 }
 
 async function loadCustomWatchlist() {
@@ -604,7 +625,10 @@ async function loadCustomWatchlist() {
     if (savedIds.length > 0) {
         customWatchlist = [];
         for (const id of savedIds) {
-            const coinData = await fetchCryptoData(id);
+            let coinData = await fetchCryptoData(id);
+            if (!coinData) {
+                coinData = getCachedData(`coin_${id}`); // Fallback to cached data
+            }
             if (coinData) {
                 coinData.id = id;
                 customWatchlist.push(coinData);
