@@ -1,7 +1,8 @@
-console.log('Script.js loaded - starting execution'); // Debug to confirm script runs
+console.log('Script.js loaded - starting execution'); // Debug to confirm script starts
 
 // Define critical functions at the top for global access
 window.addCoin = async function(coinIdFromDropdown = null) {
+    console.log('addCoin called with:', coinIdFromDropdown);
     const input = document.getElementById('coinInput');
     const query = coinIdFromDropdown || input.value.trim().toLowerCase();
     const dropdown = document.getElementById('suggestions');
@@ -64,6 +65,7 @@ window.addCoin = async function(coinIdFromDropdown = null) {
 };
 
 window.updatePortfolio = async function() {
+    console.log('updatePortfolio called');
     const solWallet = document.getElementById('solWallet').value.trim();
     const xrpWallet = document.getElementById('xrpWallet').value.trim();
     let totalValue = 0;
@@ -92,6 +94,8 @@ const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
 const HELIUS_API_KEY = 'ec5f4755-4618-4e4f-af89-1381861152c1'; // Replace with your actual new Helius API key
 const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+console.log('HELIUS_API_KEY set to:', HELIUS_API_KEY); // Debug to confirm key
 
 async function queueFetch(url, retries = 3) {
     return new Promise((resolve) => {
@@ -385,6 +389,7 @@ function loadSavedWallets() {
 }
 
 async function initPage() {
+    console.log('Initializing page...');
     await fetchCoinList();
     await fetchTrendingWatchlists();
     await fetchHeaderPrices();
@@ -666,6 +671,7 @@ document.getElementById('coinInput').addEventListener('input', debounce((e) => {
 }, 300));
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM fully loaded');
     document.getElementById('theme-toggle').addEventListener('click', () => {
         document.body.classList.toggle('light-theme');
     });
@@ -690,3 +696,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+console.log('Script.js fully loaded');
