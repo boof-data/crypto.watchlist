@@ -9,16 +9,15 @@ let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
 const HELIUS_API_KEY = 'c5bf60fd-ad6d-4c08-ae51-ad352574cfaf';
-const COINGECKO_CACHE_KEY = 'coinGeckoCache';
+const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-// Queue for CoinGecko requests to avoid 429
-function queueFetch(url) {
+async function queueFetch(url) {
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
-            await new Promise(res => setTimeout(res, 250)); // 250ms delay
+            await new Promise(res => setTimeout(res, 250)); // 250ms delay (~4 reqs/sec)
             try {
-                const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+                const response = await fetch(`${COINGECKO_PROXY}${encodeURIComponent(url)}`);
                 if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
                 const data = await response.json();
                 resolve(data);
@@ -147,8 +146,21 @@ async function fetchTrendingWatchlists() {
 
 async function fetchFearAndGreed() {
     try {
+        const cached = getCachedData('fearAndGreed');
+        if (cached) {
+            const value = parseInt(cached.data[0].value);
+            const dial = document.getElementById('fear-greed-dial');
+            const valueText = document.getElementById('fear-greed-value');
+            const circumference = 2 * Math.PI * 40;
+            const offset = circumference - (value / 100) * circumference;
+            dial.style.strokeDasharray = `${circumference} ${circumference}`;
+            dial.style.strokeDashoffset = offset;
+            valueText.textContent = value;
+            return;
+        }
         const response = await fetch('https://api.alternative.me/fng/');
         const data = await response.json();
+        setCachedData('fearAndGreed', data);
         const value = parseInt(data.data[0].value);
         const dial = document.getElementById('fear-greed-dial');
         const valueText = document.getElementById('fear-greed-value');
@@ -200,7 +212,7 @@ async function fetchSolanaBalances(address) {
             solPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
             setCachedData('solPrice', solPriceData);
         }
-        let totalValue = solValue * solPriceData.solana.usd;
+        let totalValue = solValue * (solPriceData?.solana?.usd || 0);
 
         const tokenBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
             method: 'POST',
@@ -215,7 +227,7 @@ async function fetchSolanaBalances(address) {
             const coin = coinList.find(c => c.platforms && c.platforms.solana === mint);
             if (coin) {
                 const priceData = await fetchCryptoData(coin.id);
-                totalValue += amount * (priceData.price || 0);
+                totalValue += amount * (priceData?.price || 0);
             } else {
                 console.log(`No CoinGecko match for Solana mint: ${mint}`);
             }
@@ -250,7 +262,7 @@ async function fetchXRPBalances(address) {
                     xrpPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
                     setCachedData('xrpPrice', xrpPriceData);
                 }
-                totalValue += xrpValue * xrpPriceData.ripple.usd;
+                totalValue += xrpValue * (xrpPriceData?.ripple?.usd || 0);
                 ws.close();
                 resolve(totalValue);
             }
