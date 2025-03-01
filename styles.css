@@ -17,7 +17,7 @@ body.light-theme {
     justify-content: space-between;
     align-items: center;
     padding: 25px 40px;
-    background: linear-gradient(135deg, #6B48FF, #00D4D4);
+    background: linear-gradient(135deg, #4A31B8, #00D4D4);
     color: #fff;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
@@ -139,7 +139,7 @@ body.light-theme h2 {
 }
 
 .trending-tab.active {
-    background: linear-gradient(135deg, #6B48FF, #00D4D4);
+    background: linear-gradient(135deg, #4A31B8, #00D4D4);
     color: #fff;
 }
 
@@ -154,7 +154,7 @@ body.light-theme .trending-tab {
 }
 
 body.light-theme .trending-tab.active {
-    background: linear-gradient(135deg, #6B48FF, #00D4D4);
+    background: linear-gradient(135deg, #4A31B8, #00D4D4);
     color: #fff;
 }
 
@@ -185,7 +185,7 @@ input:focus {
 
 button {
     padding: 16px 30px;
-    background: linear-gradient(135deg, #6B48FF, #00D4D4);
+    background: linear-gradient(135deg, #4A31B8, #00D4D4);
     color: white;
     border: none;
     border-radius: 8px;

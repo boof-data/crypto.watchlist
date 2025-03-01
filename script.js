@@ -77,7 +77,7 @@ async function fetchCryptoData(coinId) {
 async function fetchTrendingWatchlists() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
-        const coins ='sd await response.json();
+        const coins = await response.json();
         const nonStableCoins = coins.filter(coin => !stableCoinIds.includes(coin.id));
         trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
             id: coin.id,
@@ -131,7 +131,7 @@ async function fetchFearAndGreed() {
         const value = parseInt(data.data[0].value);
         const dial = document.getElementById('fear-greed-dial');
         const valueText = document.getElementById('fear-greed-value');
-        const circumference = 2 * Math.PI * 40; // r=40
+        const circumference = 2 * Math.PI * 40;
         const offset = circumference - (value / 100) * circumference;
         dial.style.strokeDasharray = `${circumference} ${circumference}`;
         dial.style.strokeDashoffset = offset;
@@ -323,7 +323,7 @@ function rankSuggestions(input) {
             const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 5 : coin.symbol.toLowerCase().includes(lowerInput) ? 2 : 0;
             const nameMatch = coin.name.toLowerCase() === lowerInput ? 4 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
-            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0; // Higher weight for contracts
+            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0;
             const cached = coinCache.get(coin.id);
             const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0;
             const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
