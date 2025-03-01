@@ -11,15 +11,17 @@
         <span class="logo">Token.Data</span>
         <div class="header-info">
             <div id="fear-greed" class="fear-greed">
-                <svg width="80" height="80" viewBox="0 0 100 100">
+                <svg width="80" height="80" viewBox="0 0 100 100" class="fear-greed-svg">
                     <circle cx="50" cy="50" r="40" fill="none" stroke="#33354A" stroke-width="10"/>
                     <circle cx="50" cy="50" r="40" fill="none" stroke="#00CC00" stroke-width="10" stroke-dasharray="0 251.2" id="fear-greed-dial"/>
                     <text x="50" y="55" text-anchor="middle" fill="#E0E1E8" font-size="20" id="fear-greed-value">--</text>
                 </svg>
             </div>
-            <span id="btc-price" class="token-price"><img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> --</span>
-            <span id="eth-price" class="token-price"><img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> --</span>
-            <span id="sol-price" class="token-price"><img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> --</span>
+            <div class="token-prices">
+                <span id="btc-price" class="token-price"><img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> --</span>
+                <span id="eth-price" class="token-price"><img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> --</span>
+                <span id="sol-price" class="token-price"><img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> --</span>
+            </div>
         </div>
         <div class="controls">
             <button id="theme-toggle">Toggle Theme</button>
@@ -28,26 +30,32 @@
     </div>
     <div class="container">
         <div class="watchlist-section">
-            <h2>Custom Watchlist</h2>
+            <div class="section-header">
+                <h2>Custom Watchlist</h2>
+                <button class="toggle-section" data-target="customWatchlistBody">▼</button>
+            </div>
             <div class="watchlist-controls">
                 <input type="text" id="coinInput" placeholder="Search coins or contract address (e.g., BTC, 0x...)">
                 <div id="suggestions" class="dropdown"></div>
-                <button onclick="addCoin()">Add to Watchlist</button>
+                <button onclick="addCoin()">Add</button>
             </div>
             <div class="watchlist">
                 <div class="table-header">
                     <span>Coin</span>
                     <span>Symbol</span>
-                    <span>Price (USD)</span>
-                    <span>24h Change</span>
-                    <span>Market Cap</span>
-                    <span>24h Trend</span>
+                    <span>Price</span>
+                    <span>24h</span>
+                    <span>Cap</span>
+                    <span>Trend</span>
                 </div>
                 <div id="customWatchlistBody" class="watchlist-body"></div>
             </div>
         </div>
         <div class="watchlist-section">
-            <h2>Trending Watchlists</h2>
+            <div class="section-header">
+                <h2>Trending Watchlists</h2>
+                <button class="toggle-section" data-target="trendingWatchlistBody">▼</button>
+            </div>
             <div class="trending-controls">
                 <button class="trending-tab active" data-tab="crypto">Top Crypto</button>
                 <button class="trending-tab" data-tab="eth">ETH Tokens</button>
@@ -57,10 +65,10 @@
                 <div class="table-header">
                     <span>Coin</span>
                     <span>Symbol</span>
-                    <span>Price (USD)</span>
-                    <span>24h Change</span>
-                    <span>Market Cap</span>
-                    <span>24h Trend</span>
+                    <span>Price</span>
+                    <span>24h</span>
+                    <span>Cap</span>
+                    <span>Trend</span>
                 </div>
                 <div id="trendingWatchlistBody" class="watchlist-body"></div>
             </div>

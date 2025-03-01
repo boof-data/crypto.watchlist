@@ -422,7 +422,7 @@ async function addCoin(coinIdFromDropdown = null) {
         alert('An error occurred while adding the coin.');
     } finally {
         addButton.disabled = false;
-        addButton.textContent = 'Add to Watchlist';
+        addButton.textContent = 'Add';
     }
 }
 
@@ -498,6 +498,16 @@ document.addEventListener('DOMContentLoaded', () => {
             e.target.classList.add('active');
             activeTrendingTab = e.target.dataset.tab;
             updateTrendingWatchlist();
+        });
+    });
+
+    const toggles = document.querySelectorAll('.toggle-section');
+    toggles.forEach(toggle => {
+        toggle.addEventListener('click', (e) => {
+            const targetId = e.target.dataset.target;
+            const section = document.getElementById(targetId);
+            section.classList.toggle('collapsed');
+            e.target.textContent = section.classList.contains('collapsed') ? '▶' : '▼';
         });
     });
 });
