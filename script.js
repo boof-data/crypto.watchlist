@@ -210,11 +210,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 image: coin.image
             }));
             trendingETH = nonStableCoins
-                .filter(coin => {
-                    const match = coinList.some(c => c.id === coin.id && c.platforms?.ethereum);
-                    if (!match && coin.platforms?.ethereum) console.log(`ETH token mismatch: ${coin.id}`);
-                    return match;
-                })
+                .filter(coin => coin.platforms && coin.platforms.ethereum) // Use markets API platforms directly
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -227,11 +223,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     image: coin.image
                 }));
             trendingSOL = nonStableCoins
-                .filter(coin => {
-                    const match = coinList.some(c => c.id === coin.id && c.platforms?.solana);
-                    if (!match && coin.platforms?.solana) console.log(`SOL token mismatch: ${coin.id}`);
-                    return match;
-                })
+                .filter(coin => coin.platforms && coin.platforms.solana) // Use markets API platforms directly
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -303,12 +295,14 @@ async function fetchHeaderPrices() {
             throw new Error('Invalid or empty response from CoinGecko');
         }
         console.log('Raw header prices data:', data);
-        if (data.bitcoin && typeof data.bitcoin.usd === 'number' && 
-            data.ethereum && typeof data.ethereum.usd === 'number' && 
-            data.solana && typeof data.solana.usd === 'number') {
-            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
-            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
-            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
+        const btcPrice = data.bitcoin?.usd;
+        const ethPrice = data.ethereum?.usd;
+        const solPrice = data.solana?.usd;
+        console.log('Parsed prices:', { btcPrice, ethPrice, solPrice });
+        if (typeof btcPrice === 'number' && typeof ethPrice === 'number' && typeof solPrice === 'number') {
+            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${btcPrice.toLocaleString()}`;
+            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${ethPrice.toLocaleString()}`;
+            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${solPrice.toLocaleString()}`;
             setCachedData('headerPrices', data);
             console.log('Header prices set successfully');
         } else {
@@ -338,7 +332,7 @@ async function fetchSolanaBalances(address) {
         console.log('SOL value in SOL:', solValue);
         const cachedSolPrice = getCachedData('solPrice');
         let solPriceData = cachedSolPrice;
-        if (!solPriceData) {
+        if (!solPriceData || !solPriceData.solana?.usd) {
             solPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
             if (solPriceData) setCachedData('solPrice', solPriceData);
         }
@@ -399,7 +393,7 @@ async function fetchXRPBalances(address) {
                 console.log('XRP value in XRP:', xrpValue);
                 const cachedXrpPrice = getCachedData('xrpPrice');
                 let xrpPriceData = cachedXrpPrice;
-                if (!xrpPriceData) {
+                if (!xrpPriceData || !xrpPriceData.ripple?.usd) {
                     xrpPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
                     if (xrpPriceData) setCachedData('xrpPrice', xrpPriceData);
                 }
