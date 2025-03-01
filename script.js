@@ -64,13 +64,18 @@ window.addCoin = async function(coinIdFromDropdown = null) {
     }
 };
 
+// Global price cache
+let lastPrices = null;
+let lastPriceFetchTime = 0;
+const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 window.updatePortfolio = async function() {
     console.log('updatePortfolio called');
     const solWallet = document.getElementById('solWallet').value.trim();
     const xrpWallet = document.getElementById('xrpWallet').value.trim();
     let totalValue = 0;
 
-    const prices = await fetchAllPrices(); // Fetch all prices once
+    const prices = await getCachedOrFetchPrices();
     console.log('Prices for portfolio:', prices);
 
     if (solWallet) {
@@ -209,6 +214,17 @@ async function fetchAllPrices() {
     }
 }
 
+async function getCachedOrFetchPrices() {
+    const now = Date.now();
+    if (lastPrices && (now - lastPriceFetchTime < PRICE_CACHE_TTL)) {
+        console.log('Using in-memory cached prices:', lastPrices);
+        return lastPrices;
+    }
+    lastPrices = await fetchAllPrices();
+    lastPriceFetchTime = now;
+    return lastPrices;
+}
+
 async function fetchTrendingWatchlists(forceRefresh = false) {
     try {
         const cached = getCachedData('trendingWatchlists');
@@ -309,7 +325,7 @@ async function fetchFearAndGreed() {
 
 async function fetchHeaderPrices() {
     try {
-        const prices = await fetchAllPrices();
+        const prices = await getCachedOrFetchPrices();
         console.log('Header prices data:', prices);
         document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${prices.bitcoin.usd.toLocaleString()}`;
         document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${prices.ethereum.usd.toLocaleString()}`;
