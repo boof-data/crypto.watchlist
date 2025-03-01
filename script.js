@@ -185,10 +185,10 @@ async function fetchCryptoData(coinId) {
     return cached || null;
 }
 
-async function fetchTrendingWatchlists() {
+async function fetchTrendingWatchlists(forceRefresh = false) {
     try {
         const cached = getCachedData('trendingWatchlists');
-        if (cached && cached.crypto && cached.eth && cached.sol) {
+        if (!forceRefresh && cached && cached.crypto && cached.eth && cached.sol) {
             trendingCrypto = cached.crypto;
             trendingETH = cached.eth;
             trendingSOL = cached.sol;
@@ -210,7 +210,11 @@ async function fetchTrendingWatchlists() {
                 image: coin.image
             }));
             trendingETH = nonStableCoins
-                .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.ethereum))
+                .filter(coin => {
+                    const match = coinList.some(c => c.id === coin.id && c.platforms?.ethereum);
+                    if (!match && coin.platforms?.ethereum) console.log(`ETH token mismatch: ${coin.id}`);
+                    return match;
+                })
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -223,7 +227,11 @@ async function fetchTrendingWatchlists() {
                     image: coin.image
                 }));
             trendingSOL = nonStableCoins
-                .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.solana))
+                .filter(coin => {
+                    const match = coinList.some(c => c.id === coin.id && c.platforms?.solana);
+                    if (!match && coin.platforms?.solana) console.log(`SOL token mismatch: ${coin.id}`);
+                    return match;
+                })
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -283,7 +291,7 @@ async function fetchFearAndGreed() {
 async function fetchHeaderPrices() {
     try {
         const cached = getCachedData('headerPrices');
-        if (cached && cached.bitcoin && cached.ethereum && cached.solana) {
+        if (cached && cached.bitcoin?.usd && cached.ethereum?.usd && cached.solana?.usd) {
             console.log('Using cached header prices:', cached);
             document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${cached.bitcoin.usd.toLocaleString()}`;
             document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${cached.ethereum.usd.toLocaleString()}`;
@@ -294,15 +302,18 @@ async function fetchHeaderPrices() {
         if (!data || typeof data !== 'object') {
             throw new Error('Invalid or empty response from CoinGecko');
         }
-        console.log('Fetched header prices:', data);
-        if (data.bitcoin?.usd && data.ethereum?.usd && data.solana?.usd) {
+        console.log('Raw header prices data:', data);
+        if (data.bitcoin && typeof data.bitcoin.usd === 'number' && 
+            data.ethereum && typeof data.ethereum.usd === 'number' && 
+            data.solana && typeof data.solana.usd === 'number') {
             document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
             document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
             document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
             setCachedData('headerPrices', data);
+            console.log('Header prices set successfully');
         } else {
             console.warn('Header prices incomplete:', data);
-            throw new Error('Missing price data for BTC, ETH, or SOL');
+            throw new Error('Missing or invalid price data for BTC, ETH, or SOL');
         }
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
@@ -322,8 +333,9 @@ async function fetchSolanaBalances(address) {
         });
         const solBal = await solBalResponse.json();
         console.log('SOL balance response:', solBal);
-        if (!solBal.result) throw new Error('No balance data returned from Solana');
+        if (!solBal.result?.value) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
+        console.log('SOL value in SOL:', solValue);
         const cachedSolPrice = getCachedData('solPrice');
         let solPriceData = cachedSolPrice;
         if (!solPriceData) {
@@ -331,7 +343,9 @@ async function fetchSolanaBalances(address) {
             if (solPriceData) setCachedData('solPrice', solPriceData);
         }
         console.log('SOL price data:', solPriceData);
-        let totalValue = solValue * (solPriceData?.solana?.usd || 0);
+        const solUsdPrice = solPriceData?.solana?.usd || 0;
+        console.log('SOL USD price:', solUsdPrice);
+        let totalValue = solValue * solUsdPrice;
 
         console.log('Fetching SOL token balances for:', address);
         const tokenBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
@@ -348,8 +362,9 @@ async function fetchSolanaBalances(address) {
             const coin = coinList.find(c => c.platforms && c.platforms.solana === mint);
             if (coin) {
                 const priceData = await fetchCryptoData(coin.id);
-                totalValue += amount * (priceData?.price || 0);
-                console.log(`Added token ${coin.id}: ${amount} * ${priceData?.price || 0}`);
+                const tokenValue = amount * (priceData?.price || 0);
+                totalValue += tokenValue;
+                console.log(`Added token ${coin.id}: ${amount} * ${priceData?.price || 0} = ${tokenValue}`);
             } else {
                 console.log(`No CoinGecko match for Solana mint: ${mint}`);
             }
@@ -379,8 +394,9 @@ async function fetchXRPBalances(address) {
         ws.onmessage = async (event) => {
             const data = JSON.parse(event.data);
             console.log('XRP balance response:', data);
-            if (data.id === 1 && data.result && data.result.account_data) {
+            if (data.id === 1 && data.result?.account_data?.Balance) {
                 const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
+                console.log('XRP value in XRP:', xrpValue);
                 const cachedXrpPrice = getCachedData('xrpPrice');
                 let xrpPriceData = cachedXrpPrice;
                 if (!xrpPriceData) {
@@ -388,7 +404,9 @@ async function fetchXRPBalances(address) {
                     if (xrpPriceData) setCachedData('xrpPrice', xrpPriceData);
                 }
                 console.log('XRP price data:', xrpPriceData);
-                totalValue += xrpValue * (xrpPriceData?.ripple?.usd || 0);
+                const xrpUsdPrice = xrpPriceData?.ripple?.usd || 0;
+                console.log('XRP USD price:', xrpUsdPrice);
+                totalValue += xrpValue * xrpUsdPrice;
                 console.log('Total XRP value:', totalValue);
                 ws.close();
                 resolve(totalValue);
@@ -417,7 +435,7 @@ function loadSavedWallets() {
 async function initPage() {
     console.log('Initializing page...');
     await fetchCoinList();
-    await fetchTrendingWatchlists();
+    await fetchTrendingWatchlists(true); // Force initial fetch
     await fetchHeaderPrices();
     await loadCustomWatchlist();
     await fetchFearAndGreed();
@@ -715,7 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
             activeTrendingTab = e.target.dataset.tab;
             if ((activeTrendingTab === 'eth' && !trendingETH.length) || (activeTrendingTab === 'sol' && !trendingSOL.length)) {
                 console.log(`Forcing refresh for ${activeTrendingTab} due to empty list`);
-                await fetchTrendingWatchlists();
+                await fetchTrendingWatchlists(true); // Force refresh
             }
             updateTrendingWatchlist();
         });
