@@ -70,15 +70,17 @@ window.updatePortfolio = async function() {
     const xrpWallet = document.getElementById('xrpWallet').value.trim();
     let totalValue = 0;
 
+    const prices = await fetchAllPrices(); // Fetch all prices once
+
     if (solWallet) {
         console.log('Fetching Solana balance for:', solWallet);
         localStorage.setItem('solWallet', solWallet);
-        totalValue += await fetchSolanaBalances(solWallet);
+        totalValue += await fetchSolanaBalances(solWallet, prices);
     }
     if (xrpWallet) {
         console.log('Fetching XRP balance for:', xrpWallet);
         localStorage.setItem('xrpWallet', xrpWallet);
-        totalValue += await fetchXRPBalances(xrpWallet);
+        totalValue += await fetchXRPBalances(xrpWallet, prices);
     }
     console.log('Total portfolio value:', totalValue);
     document.getElementById('portfolio-value').textContent = `$${totalValue.toFixed(2)}`;
@@ -103,7 +105,7 @@ console.log('HELIUS_API_KEY set to:', HELIUS_API_KEY); // Debug to confirm key
 async function queueFetch(url, retries = 3) {
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
-            await new Promise(res => setTimeout(res, 250)); // 250ms delay (~4 reqs/sec)
+            await new Promise(res => setTimeout(res, 500)); // Increased delay to 500ms
             for (let i = 0; i < retries; i++) {
                 try {
                     console.log(`Fetching: ${url}`);
@@ -111,7 +113,7 @@ async function queueFetch(url, retries = 3) {
                     if (!response.ok) {
                         if (response.status === 429) {
                             console.warn(`Rate limit hit for ${url}, retrying (${i+1}/${retries})...`);
-                            await new Promise(res => setTimeout(res, 1000 * (i + 1))); // Exponential backoff
+                            await new Promise(res => setTimeout(res, 2000 * (i + 1))); // Longer backoff
                             continue;
                         }
                         throw new Error(`HTTP error: ${response.status}`);
@@ -183,6 +185,27 @@ async function fetchCryptoData(coinId) {
     }
     const cached = getCachedData(`coin_${coinId}`);
     return cached || null;
+}
+
+async function fetchAllPrices() {
+    try {
+        const cached = getCachedData('allPrices');
+        if (cached && cached.bitcoin?.usd && cached.ethereum?.usd && cached.solana?.usd && cached.ripple?.usd) {
+            console.log('Using cached all prices:', cached);
+            return cached;
+        }
+        const data = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd');
+        if (data) {
+            console.log('Fetched all prices:', data);
+            setCachedData('allPrices', data);
+            return data;
+        }
+        console.warn('No price data returned from API');
+        return cached || { bitcoin: { usd: 0 }, ethereum: { usd: 0 }, solana: { usd: 0 }, ripple: { usd: 0 } };
+    } catch (error) {
+        console.error('Failed to fetch all prices:', error);
+        return getCachedData('allPrices') || { bitcoin: { usd: 0 }, ethereum: { usd: 0 }, solana: { usd: 0 }, ripple: { usd: 0 } };
+    }
 }
 
 async function fetchTrendingWatchlists(forceRefresh = false) {
@@ -291,27 +314,15 @@ async function fetchFearAndGreed() {
 
 async function fetchHeaderPrices() {
     try {
-        const cached = getCachedData('headerPrices');
-        if (cached && cached.bitcoin?.usd && cached.ethereum?.usd && cached.solana?.usd) {
-            console.log('Using cached header prices:', cached);
-            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${cached.bitcoin.usd.toLocaleString()}`;
-            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${cached.ethereum.usd.toLocaleString()}`;
-            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${cached.solana.usd.toLocaleString()}`;
-            return;
-        }
-        const data = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd');
-        if (!data) {
-            throw new Error('Invalid or empty response from CoinGecko');
-        }
-        console.log('Raw header prices data:', data);
-        const btcPrice = data.bitcoin.usd;
-        const ethPrice = data.ethereum.usd;
-        const solPrice = data.solana.usd;
-        console.log('Parsed prices:', { btcPrice, ethPrice, solPrice });
+        const prices = await fetchAllPrices();
+        console.log('Header prices data:', prices);
+        const btcPrice = prices.bitcoin.usd;
+        const ethPrice = prices.ethereum.usd;
+        const solPrice = prices.solana.usd;
+        console.log('Parsed header prices:', { btcPrice, ethPrice, solPrice });
         document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${btcPrice.toLocaleString()}`;
         document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${ethPrice.toLocaleString()}`;
         document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${solPrice.toLocaleString()}`;
-        setCachedData('headerPrices', data);
         console.log('Header prices set successfully');
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
@@ -321,7 +332,7 @@ async function fetchHeaderPrices() {
     }
 }
 
-async function fetchSolanaBalances(address) {
+async function fetchSolanaBalances(address, prices) {
     try {
         console.log('Fetching SOL balance for:', address);
         const solBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
@@ -334,14 +345,7 @@ async function fetchSolanaBalances(address) {
         if (!solBal.result?.value) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
         console.log('SOL value in SOL:', solValue);
-        let solPriceData = getCachedData('solPrice');
-        if (!solPriceData || !solPriceData.solana?.usd) {
-            solPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-            console.log('Fresh SOL price fetch:', solPriceData);
-            if (solPriceData) setCachedData('solPrice', solPriceData);
-        }
-        console.log('SOL price data:', solPriceData);
-        const solUsdPrice = solPriceData?.solana?.usd || 0;
+        const solUsdPrice = prices.solana?.usd || 0;
         console.log('SOL USD price:', solUsdPrice);
         let totalValue = solValue * solUsdPrice;
 
@@ -375,7 +379,7 @@ async function fetchSolanaBalances(address) {
     }
 }
 
-async function fetchXRPBalances(address) {
+async function fetchXRPBalances(address, prices) {
     return new Promise((resolve) => {
         console.log('Fetching XRP balance for:', address);
         const ws = new WebSocket('wss://xrplcluster.com');
@@ -395,14 +399,7 @@ async function fetchXRPBalances(address) {
             if (data.id === 1 && data.result?.account_data?.Balance) {
                 const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
                 console.log('XRP value in XRP:', xrpValue);
-                let xrpPriceData = getCachedData('xrpPrice');
-                if (!xrpPriceData || !xrpPriceData.ripple?.usd) {
-                    xrpPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
-                    console.log('Fresh XRP price fetch:', xrpPriceData);
-                    if (xrpPriceData) setCachedData('xrpPrice', xrpPriceData);
-                }
-                console.log('XRP price data:', xrpPriceData);
-                const xrpUsdPrice = xrpPriceData?.ripple?.usd || 0;
+                const xrpUsdPrice = prices.ripple?.usd || 0;
                 console.log('XRP USD price:', xrpUsdPrice);
                 totalValue += xrpValue * xrpUsdPrice;
                 console.log('Total XRP value:', totalValue);
