@@ -9,8 +9,8 @@ let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
 
-// Replace with your Helius API key (free tier at helius.xyz)
-const HELIUS_API_KEY = 'YOUR_HELIUS_API_KEY_HERE';
+// Helius API key provided by you
+const HELIUS_API_KEY = 'c5bf60fd-ad6d-4c08-ae51-ad352574cfaf';
 
 async function fetchCoinList() {
     try {
