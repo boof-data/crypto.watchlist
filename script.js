@@ -209,8 +209,13 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
+            // Use CoinGecko IDs directly for ETH and SOL tokens
             trendingETH = nonStableCoins
-                .filter(coin => coin.platforms && coin.platforms.ethereum) // Use markets API platforms directly
+                .filter(coin => {
+                    const isEthToken = coinList.some(c => c.id === coin.id && c.platforms?.ethereum);
+                    if (isEthToken) console.log(`ETH token matched: ${coin.id}`);
+                    return isEthToken;
+                })
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -223,7 +228,11 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     image: coin.image
                 }));
             trendingSOL = nonStableCoins
-                .filter(coin => coin.platforms && coin.platforms.solana) // Use markets API platforms directly
+                .filter(coin => {
+                    const isSolToken = coinList.some(c => c.id === coin.id && c.platforms?.solana);
+                    if (isSolToken) console.log(`SOL token matched: ${coin.id}`);
+                    return isSolToken;
+                })
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -291,24 +300,19 @@ async function fetchHeaderPrices() {
             return;
         }
         const data = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd');
-        if (!data || typeof data !== 'object') {
+        if (!data) {
             throw new Error('Invalid or empty response from CoinGecko');
         }
         console.log('Raw header prices data:', data);
-        const btcPrice = data.bitcoin?.usd;
-        const ethPrice = data.ethereum?.usd;
-        const solPrice = data.solana?.usd;
+        const btcPrice = data.bitcoin.usd;
+        const ethPrice = data.ethereum.usd;
+        const solPrice = data.solana.usd;
         console.log('Parsed prices:', { btcPrice, ethPrice, solPrice });
-        if (typeof btcPrice === 'number' && typeof ethPrice === 'number' && typeof solPrice === 'number') {
-            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${btcPrice.toLocaleString()}`;
-            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${ethPrice.toLocaleString()}`;
-            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${solPrice.toLocaleString()}`;
-            setCachedData('headerPrices', data);
-            console.log('Header prices set successfully');
-        } else {
-            console.warn('Header prices incomplete:', data);
-            throw new Error('Missing or invalid price data for BTC, ETH, or SOL');
-        }
+        document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${btcPrice.toLocaleString()}`;
+        document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${ethPrice.toLocaleString()}`;
+        document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${solPrice.toLocaleString()}`;
+        setCachedData('headerPrices', data);
+        console.log('Header prices set successfully');
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
         document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $--`;
@@ -330,10 +334,10 @@ async function fetchSolanaBalances(address) {
         if (!solBal.result?.value) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
         console.log('SOL value in SOL:', solValue);
-        const cachedSolPrice = getCachedData('solPrice');
-        let solPriceData = cachedSolPrice;
+        let solPriceData = getCachedData('solPrice');
         if (!solPriceData || !solPriceData.solana?.usd) {
             solPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+            console.log('Fresh SOL price fetch:', solPriceData);
             if (solPriceData) setCachedData('solPrice', solPriceData);
         }
         console.log('SOL price data:', solPriceData);
@@ -391,10 +395,10 @@ async function fetchXRPBalances(address) {
             if (data.id === 1 && data.result?.account_data?.Balance) {
                 const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
                 console.log('XRP value in XRP:', xrpValue);
-                const cachedXrpPrice = getCachedData('xrpPrice');
-                let xrpPriceData = cachedXrpPrice;
+                let xrpPriceData = getCachedData('xrpPrice');
                 if (!xrpPriceData || !xrpPriceData.ripple?.usd) {
                     xrpPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
+                    console.log('Fresh XRP price fetch:', xrpPriceData);
                     if (xrpPriceData) setCachedData('xrpPrice', xrpPriceData);
                 }
                 console.log('XRP price data:', xrpPriceData);
