@@ -154,6 +154,90 @@ async function fetchHeaderPrices() {
     }
 }
 
+async function fetchSolanaBalances(address) {
+    try {
+        const solBal = await fetch('https://api.mainnet-beta.solana.com', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [address] })
+        }).then(res => res.json());
+        const tokenBal = await fetch('https://api.mainnet-beta.solana.com', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getTokenAccountsByOwner", params: [address, { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }, { encoding: "jsonParsed" }] })
+        }).then(res => res.json());
+        const solValue = solBal.result.value / 1e9; // Lamports to SOL
+        const tokens = tokenBal.result.value || [];
+        let totalValue = 0;
+        const solPrice = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd`).then(res => res.json());
+        totalValue += solValue * solPrice.solana.usd;
+
+        for (const token of tokens) {
+            const mint = token.account.data.parsed.info.mint;
+            const amount = token.account.data.parsed.info.tokenAmount.uiAmount;
+            const coin = coinList.find(c => c.platforms && c.platforms.solana === mint);
+            if (coin) {
+                const priceData = await fetchCryptoData(coin.id);
+                totalValue += amount * (priceData.price || 0);
+            }
+        }
+        return totalValue;
+    } catch (error) {
+        console.error(`Failed to fetch Solana wallet ${address}:`, error);
+        return 0;
+    }
+}
+
+async function fetchXRPBalances(address) {
+    try {
+        const response = await fetch('https://data.ripple.com/v2/accounts/' + address + '/balances');
+        const data = await response.json();
+        let totalValue = 0;
+        for (const balance of data.balances) {
+            if (balance.currency === 'XRP') {
+                const xrpPrice = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd`).then(res => res.json());
+                totalValue += parseFloat(balance.value) * xrpPrice.ripple.usd;
+            } else {
+                // For issued assets, we'd need issuer mapping to CoinGecko IDs (simplified here)
+                const coin = coinList.find(c => c.symbol.toLowerCase() === balance.currency.toLowerCase());
+                if (coin) {
+                    const priceData = await fetchCryptoData(coin.id);
+                    totalValue += parseFloat(balance.value) * (priceData.price || 0);
+                }
+            }
+        }
+        return totalValue;
+    } catch (error) {
+        console.error(`Failed to fetch XRP wallet ${address}:`, error);
+        return 0;
+    }
+}
+
+async function updatePortfolio() {
+    const solWallet = document.getElementById('solWallet').value.trim();
+    const xrpWallet = document.getElementById('xrpWallet').value.trim();
+    let totalValue = 0;
+
+    if (solWallet) {
+        localStorage.setItem('solWallet', solWallet);
+        totalValue += await fetchSolanaBalances(solWallet);
+    }
+    if (xrpWallet) {
+        localStorage.setItem('xrpWallet', xrpWallet);
+        totalValue += await fetchXRPBalances(xrpWallet);
+    }
+
+    document.getElementById('portfolio-value').textContent = `$${totalValue.toFixed(2)}`;
+}
+
+function loadSavedWallets() {
+    const solWallet = localStorage.getItem('solWallet') || '';
+    const xrpWallet = localStorage.getItem('xrpWallet') || '';
+    document.getElementById('solWallet').value = solWallet;
+    document.getElementById('xrpWallet').value = xrpWallet;
+    if (solWallet || xrpWallet) updatePortfolio();
+}
+
 function formatMarketCap(marketCap) {
     if (!marketCap) return 'N/A';
     if (marketCap >= 1e12) return `$${(marketCap / 1e12).toFixed(2)}T`;
@@ -389,7 +473,7 @@ async function addCoin(coinIdFromDropdown = null) {
             } else {
                 alert('Contract not found! Ensure the address is correct.');
                 addButton.disabled = false;
-                addButton.textContent = 'Add to Watchlist';
+                addButton.textContent = 'Add';
                 return;
             }
         } else {
@@ -399,7 +483,7 @@ async function addCoin(coinIdFromDropdown = null) {
             if (!exactMatch) {
                 alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
                 addButton.disabled = false;
-                addButton.textContent = 'Add to Watchlist';
+                addButton.textContent = 'Add';
                 return;
             }
             coinId = exactMatch.id;
@@ -471,6 +555,7 @@ fetchCoinList().then(() => {
     fetchTrendingWatchlists();
     fetchFearAndGreed();
     fetchHeaderPrices();
+    loadSavedWallets();
 });
 
 setInterval(async () => {
@@ -480,6 +565,7 @@ setInterval(async () => {
     await fetchTrendingWatchlists();
     fetchHeaderPrices();
     fetchFearAndGreed();
+    await updatePortfolio();
 }, 60000);
 
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {

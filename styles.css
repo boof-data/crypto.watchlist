@@ -94,6 +94,55 @@ body.light-theme {
     justify-content: space-between;
 }
 
+.portfolio-tracker {
+    width: 100%;
+    background: #1E2030;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+    margin-bottom: 20px;
+}
+
+body.light-theme .portfolio-tracker {
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+.wallet-inputs {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.wallet-input {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+}
+
+.wallet-input label {
+    font-size: 1em;
+    color: #E6E7EB;
+}
+
+body.light-theme .wallet-input label {
+    color: #2A2C3A;
+}
+
+#portfolio-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 15px;
+    color: #E6E7EB;
+}
+
+body.light-theme #portfolio-value {
+    color: #2A2C3A;
+}
+
 @media (max-width: 768px) {
     .container {
         flex-direction: column;
@@ -115,6 +164,17 @@ body.light-theme {
     }
     #fear-greed-value {
         font-size: 16px;
+    }
+    .wallet-inputs {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .wallet-input input {
+        width: 100%;
+        max-width: none;
+    }
+    #portfolio-value {
+        font-size: 1.5em;
     }
 }
 

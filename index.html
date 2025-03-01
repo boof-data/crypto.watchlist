@@ -29,6 +29,20 @@
         </div>
     </div>
     <div class="container">
+        <div class="portfolio-tracker">
+            <div class="wallet-inputs">
+                <div class="wallet-input">
+                    <label for="solWallet">Solana Wallet</label>
+                    <input type="text" id="solWallet" placeholder="Enter Solana address">
+                </div>
+                <div class="wallet-input">
+                    <label for="xrpWallet">XRP Wallet</label>
+                    <input type="text" id="xrpWallet" placeholder="Enter XRP address">
+                </div>
+                <button onclick="updatePortfolio()">Update</button>
+            </div>
+            <div id="portfolio-value" class="portfolio-value">$0.00</div>
+        </div>
         <div class="watchlist-section">
             <div class="section-header">
                 <h2>Custom Watchlist</h2>
