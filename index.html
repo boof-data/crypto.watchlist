@@ -31,14 +31,8 @@
     <div class="container">
         <div class="portfolio-tracker">
             <div class="wallet-inputs">
-                <div class="wallet-input">
-                    <label for="solWallet">Solana Wallet</label>
-                    <input type="text" id="solWallet" placeholder="Enter Solana address">
-                </div>
-                <div class="wallet-input">
-                    <label for="xrpWallet">XRP Wallet</label>
-                    <input type="text" id="xrpWallet" placeholder="Enter XRP address">
-                </div>
+                <input type="text" id="solWallet" placeholder="Solana Wallet">
+                <input type="text" id="xrpWallet" placeholder="XRP Wallet">
                 <button onclick="updatePortfolio()">Update</button>
             </div>
             <div id="portfolio-value" class="portfolio-value">$0.00</div>

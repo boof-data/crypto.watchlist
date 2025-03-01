@@ -156,22 +156,25 @@ async function fetchHeaderPrices() {
 
 async function fetchSolanaBalances(address) {
     try {
-        const solBal = await fetch('https://api.mainnet-beta.solana.com', {
+        const solBalResponse = await fetch('https://api.mainnet-beta.solana.com', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [address] })
-        }).then(res => res.json());
-        const tokenBal = await fetch('https://api.mainnet-beta.solana.com', {
+        });
+        const solBal = await solBalResponse.json();
+        if (!solBal.result) throw new Error('No balance data returned');
+        const solValue = solBal.result.value / 1e9; // Lamports to SOL
+        const solPriceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd`);
+        const solPrice = await solPriceResponse.json();
+        let totalValue = solValue * solPrice.solana.usd;
+
+        const tokenBalResponse = await fetch('https://api.mainnet-beta.solana.com', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getTokenAccountsByOwner", params: [address, { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }, { encoding: "jsonParsed" }] })
-        }).then(res => res.json());
-        const solValue = solBal.result.value / 1e9; // Lamports to SOL
+        });
+        const tokenBal = await tokenBalResponse.json();
         const tokens = tokenBal.result.value || [];
-        let totalValue = 0;
-        const solPrice = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd`).then(res => res.json());
-        totalValue += solValue * solPrice.solana.usd;
-
         for (const token of tokens) {
             const mint = token.account.data.parsed.info.mint;
             const amount = token.account.data.parsed.info.tokenAmount.uiAmount;
@@ -179,6 +182,8 @@ async function fetchSolanaBalances(address) {
             if (coin) {
                 const priceData = await fetchCryptoData(coin.id);
                 totalValue += amount * (priceData.price || 0);
+            } else {
+                console.log(`No CoinGecko match for Solana mint: ${mint}`);
             }
         }
         return totalValue;
@@ -192,17 +197,19 @@ async function fetchXRPBalances(address) {
     try {
         const response = await fetch('https://data.ripple.com/v2/accounts/' + address + '/balances');
         const data = await response.json();
+        if (!data.balances) throw new Error('No balance data returned');
         let totalValue = 0;
         for (const balance of data.balances) {
             if (balance.currency === 'XRP') {
                 const xrpPrice = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd`).then(res => res.json());
                 totalValue += parseFloat(balance.value) * xrpPrice.ripple.usd;
             } else {
-                // For issued assets, we'd need issuer mapping to CoinGecko IDs (simplified here)
                 const coin = coinList.find(c => c.symbol.toLowerCase() === balance.currency.toLowerCase());
                 if (coin) {
                     const priceData = await fetchCryptoData(coin.id);
                     totalValue += parseFloat(balance.value) * (priceData.price || 0);
+                } else {
+                    console.log(`No CoinGecko match for XRP asset: ${balance.currency}`);
                 }
             }
         }

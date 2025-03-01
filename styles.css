@@ -96,11 +96,16 @@ body.light-theme {
 
 .portfolio-tracker {
     width: 100%;
+    max-width: 1400px;
     background: #1E2030;
     border-radius: 12px;
-    padding: 15px;
+    padding: 10px;
     box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
     margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
 }
 
 body.light-theme .portfolio-tracker {
@@ -110,32 +115,21 @@ body.light-theme .portfolio-tracker {
 
 .wallet-inputs {
     display: flex;
-    gap: 15px;
+    gap: 10px;
     align-items: center;
     flex-wrap: wrap;
+    justify-content: center;
 }
 
-.wallet-input {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    flex: 1;
-}
-
-.wallet-input label {
+.wallet-inputs input {
+    width: 300px;
+    padding: 8px;
     font-size: 1em;
-    color: #E6E7EB;
-}
-
-body.light-theme .wallet-input label {
-    color: #2A2C3A;
 }
 
 #portfolio-value {
-    font-size: 1.8em;
+    font-size: 1.5em;
     font-weight: 700;
-    text-align: center;
-    margin-top: 15px;
     color: #E6E7EB;
 }
 
@@ -167,14 +161,14 @@ body.light-theme #portfolio-value {
     }
     .wallet-inputs {
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
     }
-    .wallet-input input {
+    .wallet-inputs input {
         width: 100%;
         max-width: none;
     }
     #portfolio-value {
-        font-size: 1.5em;
+        font-size: 1.2em;
     }
 }
 
