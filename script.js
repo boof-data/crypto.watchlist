@@ -1,3 +1,84 @@
+console.log('Script.js loaded - starting execution'); // Debug to confirm script runs
+
+// Define critical functions at the top for global access
+window.addCoin = async function(coinIdFromDropdown = null) {
+    const input = document.getElementById('coinInput');
+    const query = coinIdFromDropdown || input.value.trim().toLowerCase();
+    const dropdown = document.getElementById('suggestions');
+    const addButton = document.querySelector('.watchlist-controls button');
+
+    if (!query || customWatchlist.some(coin => coin.id === query)) {
+        alert('Please enter a valid coin or it already exists!');
+        return;
+    }
+
+    addButton.disabled = true;
+    addButton.textContent = 'Adding...';
+
+    let coinId = coinIdFromDropdown;
+    if (!coinId) {
+        const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
+        if (isContract) {
+            const coin = coinList.find(c => c.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === query));
+            if (coin) {
+                coinId = coin.id;
+                console.log(`Matched contract ${query} to ${coin.name} (${coin.id})`);
+            } else {
+                alert('Contract not found! Ensure the address is correct.');
+                addButton.disabled = false;
+                addButton.textContent = 'Add';
+                return;
+            }
+        } else {
+            const exactMatch = coinList.find(coin =>
+                coin.id === query || coin.symbol.toLowerCase() === query || coin.name.toLowerCase() === query
+            );
+            if (!exactMatch) {
+                alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
+                addButton.disabled = false;
+                addButton.textContent = 'Add';
+                return;
+            }
+            coinId = exactMatch.id;
+        }
+    }
+
+    try {
+        const coinData = await fetchCryptoData(coinId);
+        if (coinData) {
+            coinData.id = coinId;
+            customWatchlist.push(coinData);
+            updateCustomWatchlist();
+            input.value = '';
+            dropdown.innerHTML = '';
+        } else {
+            alert('Failed to fetch coin data. Try again.');
+        }
+    } catch (error) {
+        console.error('Error adding coin:', error);
+        alert('An error occurred while adding the coin.');
+    } finally {
+        addButton.disabled = false;
+        addButton.textContent = 'Add';
+    }
+};
+
+window.updatePortfolio = async function() {
+    const solWallet = document.getElementById('solWallet').value.trim();
+    const xrpWallet = document.getElementById('xrpWallet').value.trim();
+    let totalValue = 0;
+
+    if (solWallet) {
+        localStorage.setItem('solWallet', solWallet);
+        totalValue += await fetchSolanaBalances(solWallet);
+    }
+    if (xrpWallet) {
+        localStorage.setItem('xrpWallet', xrpWallet);
+        totalValue += await fetchXRPBalances(xrpWallet);
+    }
+    document.getElementById('portfolio-value').textContent = `$${totalValue.toFixed(2)}`;
+};
+
 let customWatchlist = [];
 let trendingCrypto = [];
 let trendingETH = [];
@@ -8,10 +89,7 @@ let requestQueue = Promise.resolve();
 let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
-// Use environment variable or fallback to your new key for testing
-const HELIUS_API_KEY = typeof process !== 'undefined' && process.env.HELIUS_API_KEY 
-    ? process.env.HELIUS_API_KEY 
-    : ec5f4755-4618-4e4f-af89-1381861152c1; // Replace with your actual new key
+const HELIUS_API_KEY = 'ec5f4755-4618-4e4f-af89-1381861152c1'; // Replace with your actual new Helius API key
 const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
@@ -299,23 +377,6 @@ async function fetchXRPBalances(address) {
     });
 }
 
-// Make updatePortfolio globally accessible
-window.updatePortfolio = async function() {
-    const solWallet = document.getElementById('solWallet').value.trim();
-    const xrpWallet = document.getElementById('xrpWallet').value.trim();
-    let totalValue = 0;
-
-    if (solWallet) {
-        localStorage.setItem('solWallet', solWallet);
-        totalValue += await fetchSolanaBalances(solWallet);
-    }
-    if (xrpWallet) {
-        localStorage.setItem('xrpWallet', xrpWallet);
-        totalValue += await fetchXRPBalances(xrpWallet);
-    }
-    document.getElementById('portfolio-value').textContent = `$${totalValue.toFixed(2)}`;
-}
-
 function loadSavedWallets() {
     const solWallet = localStorage.getItem('solWallet') || '';
     const xrpWallet = localStorage.getItem('xrpWallet') || '';
@@ -542,69 +603,6 @@ function showSuggestions(input) {
         };
         dropdown.appendChild(option);
     });
-}
-
-// Make addCoin globally accessible
-window.addCoin = async function(coinIdFromDropdown = null) {
-    const input = document.getElementById('coinInput');
-    const query = coinIdFromDropdown || input.value.trim().toLowerCase();
-    const dropdown = document.getElementById('suggestions');
-    const addButton = document.querySelector('.watchlist-controls button');
-
-    if (!query || customWatchlist.some(coin => coin.id === query)) {
-        alert('Please enter a valid coin or it already exists!');
-        return;
-    }
-
-    addButton.disabled = true;
-    addButton.textContent = 'Adding...';
-
-    let coinId = coinIdFromDropdown;
-    if (!coinId) {
-        const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
-        if (isContract) {
-            const coin = coinList.find(c => c.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === query));
-            if (coin) {
-                coinId = coin.id;
-                console.log(`Matched contract ${query} to ${coin.name} (${coin.id})`);
-            } else {
-                alert('Contract not found! Ensure the address is correct.');
-                addButton.disabled = false;
-                addButton.textContent = 'Add';
-                return;
-            }
-        } else {
-            const exactMatch = coinList.find(coin =>
-                coin.id === query || coin.symbol.toLowerCase() === query || coin.name.toLowerCase() === query
-            );
-            if (!exactMatch) {
-                alert('Coin not found! Try: BTC, ETH, XRP, PEPE');
-                addButton.disabled = false;
-                addButton.textContent = 'Add';
-                return;
-            }
-            coinId = exactMatch.id;
-        }
-    }
-
-    try {
-        const coinData = await fetchCryptoData(coinId);
-        if (coinData) {
-            coinData.id = coinId;
-            customWatchlist.push(coinData);
-            updateCustomWatchlist();
-            input.value = '';
-            dropdown.innerHTML = '';
-        } else {
-            alert('Failed to fetch coin data. Try again.');
-        }
-    } catch (error) {
-        console.error('Error adding coin:', error);
-        alert('An error occurred while adding the coin.');
-    } finally {
-        addButton.disabled = false;
-        addButton.textContent = 'Add';
-    }
 }
 
 function removeCoin(index) {
