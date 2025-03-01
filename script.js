@@ -8,33 +8,52 @@ let requestQueue = Promise.resolve();
 let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
-
-// Helius API key provided by you
 const HELIUS_API_KEY = 'c5bf60fd-ad6d-4c08-ae51-ad352574cfaf';
+const COINGECKO_CACHE_KEY = 'coinGeckoCache';
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+// Queue for CoinGecko requests to avoid 429
+function queueFetch(url) {
+    return new Promise((resolve) => {
+        requestQueue = requestQueue.then(async () => {
+            await new Promise(res => setTimeout(res, 250)); // 250ms delay
+            try {
+                const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                const data = await response.json();
+                resolve(data);
+            } catch (error) {
+                console.error(`Failed to fetch ${url}:`, error);
+                resolve(null);
+            }
+        });
+    });
+}
+
+function getCachedData(key) {
+    const cached = JSON.parse(localStorage.getItem(key));
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
+    return null;
+}
+
+function setCachedData(key, data) {
+    localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data }));
+}
 
 async function fetchCoinList() {
     try {
-        if (coinList.length === 0) {
-            const response = await fetch('https://api.coingecko.com/api/v3/coins/list?include_platform=true');
-            coinList = await response.json();
+        const cached = getCachedData('coinList');
+        if (cached) {
+            coinList = cached;
+            console.log('Loaded coin list from cache');
+            return;
+        }
+        const data = await queueFetch('https://api.coingecko.com/api/v3/coins/list?include_platform=true');
+        if (data) {
+            coinList = data;
+            setCachedData('coinList', data);
             console.log('Full coin list fetched:', coinList.slice(0, 5));
         }
-        const responses = await Promise.all([
-            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true'),
-            fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2&sparkline=true')
-        ]);
-        const data = await Promise.all(responses.map(res => res.json()));
-        const markets = [].concat(...data);
-        markets.forEach(coin => coinCache.set(coin.id, {
-            name: coin.name,
-            symbol: coin.symbol.toUpperCase(),
-            price: coin.current_price,
-            change24h: coin.price_change_percentage_24h,
-            marketCap: coin.market_cap,
-            sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
-            image: coin.image
-        }));
-        console.log('Markets fetched (500 coins):', markets.slice(0, 5));
     } catch (error) {
         console.error('Failed to fetch coin list:', error);
     }
@@ -44,58 +63,42 @@ async function fetchCryptoData(coinId) {
     if (coinCache.has(coinId)) {
         const cached = coinCache.get(coinId);
         const now = Date.now();
-        if (now - (cached.lastFetched || 0) < 60000) return cached;
+        if (now - (cached.lastFetched || 0) < CACHE_TTL) return cached;
     }
-    return new Promise((resolve) => {
-        requestQueue = requestQueue.then(async () => {
-            await new Promise(resolve => setTimeout(resolve, 250));
-            try {
-                const response = await fetch(
-                    `https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`
-                );
-                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-                const data = await response.json();
-                const coinData = {
-                    id: data.id,
-                    name: data.name,
-                    symbol: data.symbol.toUpperCase(),
-                    price: data.market_data.current_price.usd,
-                    change24h: data.market_data.price_change_percentage_24h,
-                    marketCap: data.market_data.market_cap.usd,
-                    sparkline: data.market_data.sparkline_7d ? data.market_data.sparkline_7d.price.slice(-24) : [],
-                    image: data.image.thumb,
-                    lastFetched: Date.now()
-                };
-                coinCache.set(coinId, coinData);
-                resolve(coinData);
-            } catch (error) {
-                console.error(`Failed to fetch ${coinId}: ${error.message}`);
-                const cached = coinCache.get(coinId);
-                resolve(cached || null);
-            }
-        });
-    });
+    const data = await queueFetch(`https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`);
+    if (data) {
+        const coinData = {
+            id: data.id,
+            name: data.name,
+            symbol: data.symbol.toUpperCase(),
+            price: data.market_data.current_price.usd,
+            change24h: data.market_data.price_change_percentage_24h,
+            marketCap: data.market_data.market_cap.usd,
+            sparkline: data.market_data.sparkline_7d ? data.market_data.sparkline_7d.price.slice(-24) : [],
+            image: data.image.thumb,
+            lastFetched: Date.now()
+        };
+        coinCache.set(coinId, coinData);
+        return coinData;
+    }
+    return null;
 }
 
 async function fetchTrendingWatchlists() {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
-        const coins = await response.json();
-        const nonStableCoins = coins.filter(coin => !stableCoinIds.includes(coin.id));
-        trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
-            id: coin.id,
-            name: coin.name,
-            symbol: coin.symbol.toUpperCase(),
-            price: coin.current_price,
-            change24h: coin.price_change_percentage_24h,
-            marketCap: coin.market_cap,
-            sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
-            image: coin.image
-        }));
-        trendingETH = nonStableCoins
-            .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.ethereum))
-            .slice(0, 10)
-            .map(coin => ({
+        const cached = getCachedData('trendingWatchlists');
+        if (cached) {
+            trendingCrypto = cached.crypto;
+            trendingETH = cached.eth;
+            trendingSOL = cached.sol;
+            console.log('Loaded trending watchlists from cache');
+            updateTrendingWatchlist();
+            return;
+        }
+        const data = await queueFetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
+        if (data) {
+            const nonStableCoins = data.filter(coin => !stableCoinIds.includes(coin.id));
+            trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
                 id: coin.id,
                 name: coin.name,
                 symbol: coin.symbol.toUpperCase(),
@@ -105,23 +108,38 @@ async function fetchTrendingWatchlists() {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-        trendingSOL = nonStableCoins
-            .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.solana))
-            .slice(0, 10)
-            .map(coin => ({
-                id: coin.id,
-                name: coin.name,
-                symbol: coin.symbol.toUpperCase(),
-                price: coin.current_price,
-                change24h: coin.price_change_percentage_24h,
-                marketCap: coin.market_cap,
-                sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
-                image: coin.image
-            }));
-        trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
-        trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
-        trendingSOL.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
-        updateTrendingWatchlist();
+            trendingETH = nonStableCoins
+                .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.ethereum))
+                .slice(0, 10)
+                .map(coin => ({
+                    id: coin.id,
+                    name: coin.name,
+                    symbol: coin.symbol.toUpperCase(),
+                    price: coin.current_price,
+                    change24h: coin.price_change_percentage_24h,
+                    marketCap: coin.market_cap,
+                    sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+                    image: coin.image
+                }));
+            trendingSOL = nonStableCoins
+                .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.solana))
+                .slice(0, 10)
+                .map(coin => ({
+                    id: coin.id,
+                    name: coin.name,
+                    symbol: coin.symbol.toUpperCase(),
+                    price: coin.current_price,
+                    change24h: coin.price_change_percentage_24h,
+                    marketCap: coin.market_cap,
+                    sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+                    image: coin.image
+                }));
+            trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+            trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+            trendingSOL.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+            setCachedData('trendingWatchlists', { crypto: trendingCrypto, eth: trendingETH, sol: trendingSOL });
+            updateTrendingWatchlist();
+        }
     } catch (error) {
         console.error('Failed to fetch trending watchlists:', error);
     }
@@ -147,11 +165,20 @@ async function fetchFearAndGreed() {
 
 async function fetchHeaderPrices() {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd');
-        const data = await response.json();
-        document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
-        document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
-        document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
+        const cached = getCachedData('headerPrices');
+        if (cached) {
+            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${cached.bitcoin.usd.toLocaleString()}`;
+            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${cached.ethereum.usd.toLocaleString()}`;
+            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${cached.solana.usd.toLocaleString()}`;
+            return;
+        }
+        const data = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd');
+        if (data) {
+            document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
+            document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
+            document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
+            setCachedData('headerPrices', data);
+        }
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
     }
@@ -167,9 +194,13 @@ async function fetchSolanaBalances(address) {
         const solBal = await solBalResponse.json();
         if (!solBal.result) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
-        const solPriceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd`);
-        const solPrice = await solPriceResponse.json();
-        let totalValue = solValue * solPrice.solana.usd;
+        const cachedSolPrice = getCachedData('solPrice');
+        let solPriceData = cachedSolPrice;
+        if (!solPriceData) {
+            solPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+            setCachedData('solPrice', solPriceData);
+        }
+        let totalValue = solValue * solPriceData.solana.usd;
 
         const tokenBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
             method: 'POST',
@@ -206,35 +237,20 @@ async function fetchXRPBalances(address) {
                 account: address,
                 ledger_index: "validated"
             }));
-            ws.send(JSON.stringify({
-                id: 2,
-                command: "account_lines",
-                account: address,
-                ledger_index: "validated"
-            }));
         };
         let totalValue = 0;
-        let requestsCompleted = 0;
 
         ws.onmessage = async (event) => {
             const data = JSON.parse(event.data);
             if (data.id === 1 && data.result && data.result.account_data) {
                 const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
-                const xrpPrice = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd`).then(res => res.json());
-                totalValue += xrpValue * xrpPrice.ripple.usd;
-            } else if (data.id === 2 && data.result && data.result.lines) {
-                for (const line of data.result.lines) {
-                    const coin = coinList.find(c => c.symbol.toLowerCase() === line.currency.toLowerCase());
-                    if (coin) {
-                        const priceData = await fetchCryptoData(coin.id);
-                        totalValue += parseFloat(line.balance) * (priceData.price || 0);
-                    } else {
-                        console.log(`No CoinGecko match for XRP asset: ${line.currency}`);
-                    }
+                const cachedXrpPrice = getCachedData('xrpPrice');
+                let xrpPriceData = cachedXrpPrice;
+                if (!xrpPriceData) {
+                    xrpPriceData = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd');
+                    setCachedData('xrpPrice', xrpPriceData);
                 }
-            }
-            requestsCompleted++;
-            if (requestsCompleted === 2) {
+                totalValue += xrpValue * xrpPriceData.ripple.usd;
                 ws.close();
                 resolve(totalValue);
             }
@@ -270,7 +286,16 @@ function loadSavedWallets() {
     const xrpWallet = localStorage.getItem('xrpWallet') || '';
     document.getElementById('solWallet').value = solWallet;
     document.getElementById('xrpWallet').value = xrpWallet;
-    if (solWallet || xrpWallet) updatePortfolio();
+}
+
+async function initPage() {
+    await fetchCoinList();
+    await fetchTrendingWatchlists();
+    await fetchHeaderPrices();
+    await loadCustomWatchlist();
+    await fetchFearAndGreed();
+    loadSavedWallets();
+    setTimeout(updatePortfolio, 1000); // Defer portfolio update
 }
 
 function formatMarketCap(marketCap) {
@@ -585,21 +610,15 @@ function debounce(func, wait) {
     };
 }
 
-fetchCoinList().then(() => {
-    loadCustomWatchlist();
-    fetchTrendingWatchlists();
-    fetchFearAndGreed();
-    fetchHeaderPrices();
-    loadSavedWallets();
-});
+initPage();
 
 setInterval(async () => {
     const now = Date.now();
     if (now - lastUpdate < 60000) return;
     console.log('Refreshing trending watchlists...');
     await fetchTrendingWatchlists();
-    fetchHeaderPrices();
-    fetchFearAndGreed();
+    await fetchHeaderPrices();
+    await fetchFearAndGreed();
     await updatePortfolio();
 }, 60000);
 
