@@ -89,9 +89,8 @@ body.light-theme {
     margin: 20px auto;
     padding: 10px;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     gap: 20px;
-    justify-content: space-between;
 }
 
 .portfolio-tracker {
@@ -101,7 +100,6 @@ body.light-theme {
     border-radius: 12px;
     padding: 10px;
     box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
-    margin-bottom: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -137,39 +135,11 @@ body.light-theme #portfolio-value {
     color: #2A2C3A;
 }
 
-@media (max-width: 768px) {
-    .container {
-        flex-direction: column;
-        gap: 15px;
-        padding: 5px;
-    }
-    .header {
-        flex-direction: column;
-        gap: 10px;
-        padding: 10px;
-    }
-    .header-info {
-        flex-direction: column;
-        gap: 10px;
-    }
-    .fear-greed-svg {
-        width: 50px;
-        height: 50px;
-    }
-    #fear-greed-value {
-        font-size: 16px;
-    }
-    .wallet-inputs {
-        flex-direction: column;
-        gap: 8px;
-    }
-    .wallet-inputs input {
-        width: 100%;
-        max-width: none;
-    }
-    #portfolio-value {
-        font-size: 1.2em;
-    }
+.watchlist-container {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    justify-content: space-between;
 }
 
 .watchlist-section {
@@ -371,6 +341,41 @@ body.light-theme .watchlist-row:hover {
 }
 
 @media (max-width: 768px) {
+    .container {
+        gap: 15px;
+        padding: 5px;
+    }
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+    }
+    .header-info {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .fear-greed-svg {
+        width: 50px;
+        height: 50px;
+    }
+    #fear-greed-value {
+        font-size: 16px;
+    }
+    .wallet-inputs {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .wallet-inputs input {
+        width: 100%;
+        max-width: none;
+    }
+    #portfolio-value {
+        font-size: 1.2em;
+    }
+    .watchlist-container {
+        flex-direction: column;
+        gap: 15px;
+    }
     .table-header, .watchlist-row {
         grid-template-columns: 2fr 1fr 1fr 1fr;
         font-size: 1.2em;

@@ -9,6 +9,9 @@ let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
 
+// Replace with your Helius API key (free tier at helius.xyz)
+const HELIUS_API_KEY = 'YOUR_HELIUS_API_KEY_HERE';
+
 async function fetchCoinList() {
     try {
         if (coinList.length === 0) {
@@ -156,19 +159,19 @@ async function fetchHeaderPrices() {
 
 async function fetchSolanaBalances(address) {
     try {
-        const solBalResponse = await fetch('https://api.mainnet-beta.solana.com', {
+        const solBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [address] })
         });
         const solBal = await solBalResponse.json();
-        if (!solBal.result) throw new Error('No balance data returned');
+        if (!solBal.result) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
         const solPriceResponse = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd`);
         const solPrice = await solPriceResponse.json();
         let totalValue = solValue * solPrice.solana.usd;
 
-        const tokenBalResponse = await fetch('https://api.mainnet-beta.solana.com', {
+        const tokenBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getTokenAccountsByOwner", params: [address, { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }, { encoding: "jsonParsed" }] })
@@ -194,30 +197,55 @@ async function fetchSolanaBalances(address) {
 }
 
 async function fetchXRPBalances(address) {
-    try {
-        const response = await fetch('https://data.ripple.com/v2/accounts/' + address + '/balances');
-        const data = await response.json();
-        if (!data.balances) throw new Error('No balance data returned');
+    return new Promise((resolve) => {
+        const ws = new WebSocket('wss://xrplcluster.com');
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                id: 1,
+                command: "account_info",
+                account: address,
+                ledger_index: "validated"
+            }));
+            ws.send(JSON.stringify({
+                id: 2,
+                command: "account_lines",
+                account: address,
+                ledger_index: "validated"
+            }));
+        };
         let totalValue = 0;
-        for (const balance of data.balances) {
-            if (balance.currency === 'XRP') {
+        let requestsCompleted = 0;
+
+        ws.onmessage = async (event) => {
+            const data = JSON.parse(event.data);
+            if (data.id === 1 && data.result && data.result.account_data) {
+                const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
                 const xrpPrice = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd`).then(res => res.json());
-                totalValue += parseFloat(balance.value) * xrpPrice.ripple.usd;
-            } else {
-                const coin = coinList.find(c => c.symbol.toLowerCase() === balance.currency.toLowerCase());
-                if (coin) {
-                    const priceData = await fetchCryptoData(coin.id);
-                    totalValue += parseFloat(balance.value) * (priceData.price || 0);
-                } else {
-                    console.log(`No CoinGecko match for XRP asset: ${balance.currency}`);
+                totalValue += xrpValue * xrpPrice.ripple.usd;
+            } else if (data.id === 2 && data.result && data.result.lines) {
+                for (const line of data.result.lines) {
+                    const coin = coinList.find(c => c.symbol.toLowerCase() === line.currency.toLowerCase());
+                    if (coin) {
+                        const priceData = await fetchCryptoData(coin.id);
+                        totalValue += parseFloat(line.balance) * (priceData.price || 0);
+                    } else {
+                        console.log(`No CoinGecko match for XRP asset: ${line.currency}`);
+                    }
                 }
             }
-        }
-        return totalValue;
-    } catch (error) {
-        console.error(`Failed to fetch XRP wallet ${address}:`, error);
-        return 0;
-    }
+            requestsCompleted++;
+            if (requestsCompleted === 2) {
+                ws.close();
+                resolve(totalValue);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error(`WebSocket error for XRP wallet ${address}:`, error);
+            ws.close();
+            resolve(0);
+        };
+    });
 }
 
 async function updatePortfolio() {
