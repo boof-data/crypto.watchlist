@@ -10,11 +10,16 @@
     <div class="header">
         <span class="logo">Token.Data</span>
         <div class="header-info">
-            <span id="fear-greed">Fear & Greed: --</span>
+            <div id="fear-greed" class="fear-greed">
+                <svg width="80" height="80" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="#33354A" stroke-width="10"/>
+                    <circle cx="50" cy="50" r="40" fill="none" stroke="#00CC00" stroke-width="10" stroke-dasharray="0 251.2" id="fear-greed-dial"/>
+                    <text x="50" y="55" text-anchor="middle" fill="#E0E1E8" font-size="20" id="fear-greed-value">--</text>
+                </svg>
+            </div>
             <span id="btc-price" class="token-price"><img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> --</span>
             <span id="eth-price" class="token-price"><img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> --</span>
             <span id="sol-price" class="token-price"><img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> --</span>
-            <span id="xrp-price" class="token-price"><img src="https://cryptologos.cc/logos/xrp-xrp-logo.png" alt="XRP" class="token-logo"> --</span>
         </div>
         <div class="controls">
             <button id="theme-toggle">Toggle Theme</button>

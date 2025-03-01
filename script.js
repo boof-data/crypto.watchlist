@@ -7,7 +7,7 @@ let coinCache = new Map();
 let requestQueue = Promise.resolve();
 let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
-const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd']; // Common stablecoins to exclude
+const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
 
 async function fetchCoinList() {
     try {
@@ -77,7 +77,7 @@ async function fetchCryptoData(coinId) {
 async function fetchTrendingWatchlists() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
-        const coins = await response.json();
+        const coins ='sd await response.json();
         const nonStableCoins = coins.filter(coin => !stableCoinIds.includes(coin.id));
         trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
             id: coin.id,
@@ -128,21 +128,27 @@ async function fetchFearAndGreed() {
     try {
         const response = await fetch('https://api.alternative.me/fng/');
         const data = await response.json();
-        document.getElementById('fear-greed').textContent = `Fear & Greed: ${data.data[0].value} (${data.data[0].value_classification})`;
+        const value = parseInt(data.data[0].value);
+        const dial = document.getElementById('fear-greed-dial');
+        const valueText = document.getElementById('fear-greed-value');
+        const circumference = 2 * Math.PI * 40; // r=40
+        const offset = circumference - (value / 100) * circumference;
+        dial.style.strokeDasharray = `${circumference} ${circumference}`;
+        dial.style.strokeDashoffset = offset;
+        valueText.textContent = value;
     } catch (error) {
         console.error('Failed to fetch Fear & Greed index:', error);
-        document.getElementById('fear-greed').textContent = 'Fear & Greed: N/A';
+        document.getElementById('fear-greed-value').textContent = 'N/A';
     }
 }
 
 async function fetchHeaderPrices() {
     try {
-        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd');
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd');
         const data = await response.json();
         document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
         document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
         document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
-        document.getElementById('xrp-price').innerHTML = `<img src="https://cryptologos.cc/logos/xrp-xrp-logo.png" alt="XRP" class="token-logo"> $${data.ripple.usd.toLocaleString()}`;
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
     }
@@ -317,11 +323,11 @@ function rankSuggestions(input) {
             const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 5 : coin.symbol.toLowerCase().includes(lowerInput) ? 2 : 0;
             const nameMatch = coin.name.toLowerCase() === lowerInput ? 4 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
-            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 6 : 0;
+            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0; // Higher weight for contracts
             const cached = coinCache.get(coin.id);
             const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0;
             const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
-            if (contractMatch && score < 6) console.log(`Contract mismatch for ${lowerInput}: ${coin.name} (${coin.id})`);
+            if (contractMatch && score < 10) console.log(`Contract match for ${lowerInput}: ${coin.name} (${coin.id}), score: ${score}`);
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
