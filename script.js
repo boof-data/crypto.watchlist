@@ -8,7 +8,7 @@ let requestQueue = Promise.resolve();
 let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
-const HELIUS_API_KEY = 'c5bf60fd-ad6d-4c08-ae51-ad352574cfaf';
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY;
 const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
