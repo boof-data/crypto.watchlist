@@ -3,12 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoWatch</title>
+    <title>Token.Data</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="header">
-        <span class="logo">CryptoWatch</span>
+        <span class="logo">Token.Data</span>
+        <div class="header-info">
+            <span id="fear-greed">Fear & Greed: --</span>
+            <span id="btc-price" class="token-price"><img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> --</span>
+            <span id="eth-price" class="token-price"><img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> --</span>
+            <span id="sol-price" class="token-price"><img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> --</span>
+            <span id="xrp-price" class="token-price"><img src="https://cryptologos.cc/logos/xrp-xrp-logo.png" alt="XRP" class="token-logo"> --</span>
+        </div>
         <div class="controls">
             <button id="theme-toggle">Toggle Theme</button>
             <span id="last-updated">Last Updated: --</span>
@@ -28,7 +35,7 @@
                     <span>Symbol</span>
                     <span>Price (USD)</span>
                     <span>24h Change</span>
-                    <span>Market Cap (USD)</span>
+                    <span>Market Cap</span>
                     <span>24h Trend</span>
                 </div>
                 <div id="customWatchlistBody" class="watchlist-body"></div>
@@ -47,7 +54,7 @@
                     <span>Symbol</span>
                     <span>Price (USD)</span>
                     <span>24h Change</span>
-                    <span>Market Cap (USD)</span>
+                    <span>Market Cap</span>
                     <span>24h Trend</span>
                 </div>
                 <div id="trendingWatchlistBody" class="watchlist-body"></div>

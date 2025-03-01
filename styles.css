@@ -28,6 +28,32 @@ body.light-theme {
     letter-spacing: 1px;
 }
 
+.header-info {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.token-price {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+#btc-price { color: #F7931A; }
+#eth-price { color: #627EEA; }
+#sol-price { color: #9945FF; }
+#xrp-price { color: #23292F; }
+
+.token-logo {
+    width: 20px;
+    height: 20px;
+}
+
+#fear-greed {
+    font-size: 0.9em;
+}
+
 .controls {
     display: flex;
     gap: 20px;

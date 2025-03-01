@@ -7,6 +7,7 @@ let coinCache = new Map();
 let requestQueue = Promise.resolve();
 let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
+const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd']; // Common stablecoins to exclude
 
 async function fetchCoinList() {
     try {
@@ -77,7 +78,8 @@ async function fetchTrendingWatchlists() {
     try {
         const response = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
         const coins = await response.json();
-        trendingCrypto = coins.slice(0, 10).map(coin => ({
+        const nonStableCoins = coins.filter(coin => !stableCoinIds.includes(coin.id));
+        trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
             id: coin.id,
             name: coin.name,
             symbol: coin.symbol.toUpperCase(),
@@ -87,7 +89,7 @@ async function fetchTrendingWatchlists() {
             sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
             image: coin.image
         }));
-        trendingETH = coins
+        trendingETH = nonStableCoins
             .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.ethereum))
             .slice(0, 10)
             .map(coin => ({
@@ -100,7 +102,7 @@ async function fetchTrendingWatchlists() {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-        trendingSOL = coins
+        trendingSOL = nonStableCoins
             .filter(coin => coinList.some(c => c.id === coin.id && c.platforms && c.platforms.solana))
             .slice(0, 10)
             .map(coin => ({
@@ -120,6 +122,38 @@ async function fetchTrendingWatchlists() {
     } catch (error) {
         console.error('Failed to fetch trending watchlists:', error);
     }
+}
+
+async function fetchFearAndGreed() {
+    try {
+        const response = await fetch('https://api.alternative.me/fng/');
+        const data = await response.json();
+        document.getElementById('fear-greed').textContent = `Fear & Greed: ${data.data[0].value} (${data.data[0].value_classification})`;
+    } catch (error) {
+        console.error('Failed to fetch Fear & Greed index:', error);
+        document.getElementById('fear-greed').textContent = 'Fear & Greed: N/A';
+    }
+}
+
+async function fetchHeaderPrices() {
+    try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd');
+        const data = await response.json();
+        document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${data.bitcoin.usd.toLocaleString()}`;
+        document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${data.ethereum.usd.toLocaleString()}`;
+        document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${data.solana.usd.toLocaleString()}`;
+        document.getElementById('xrp-price').innerHTML = `<img src="https://cryptologos.cc/logos/xrp-xrp-logo.png" alt="XRP" class="token-logo"> $${data.ripple.usd.toLocaleString()}`;
+    } catch (error) {
+        console.error('Failed to fetch header prices:', error);
+    }
+}
+
+function formatMarketCap(marketCap) {
+    if (!marketCap) return 'N/A';
+    if (marketCap >= 1e12) return `$${(marketCap / 1e12).toFixed(2)}T`;
+    if (marketCap >= 1e9) return `$${(marketCap / 1e9).toFixed(2)}B`;
+    if (marketCap >= 1e6) return `$${(marketCap / 1e6).toFixed(2)}M`;
+    return `$${marketCap.toLocaleString()}`;
 }
 
 function formatPrice(price) {
@@ -169,7 +203,7 @@ function updateCustomWatchlist() {
             <div>${coin.symbol || '?'}</div>
             <div>${formatPrice(coin.price)}</div>
             <div style="color: ${trendColor}">${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%</div>
-            <div>$${coin.marketCap ? coin.marketCap.toLocaleString() : 'N/A'}</div>
+            <div>${formatMarketCap(coin.marketCap)}</div>
             <div>
                 <canvas class="trend-chart" width="60" height="20"></canvas>
                 <span class="remove-coin" onclick="removeCoin(${index})">×</span>
@@ -201,7 +235,7 @@ function updateTrendingWatchlist() {
             <div>${coin.symbol || '?'}</div>
             <div>${formatPrice(coin.price)}</div>
             <div style="color: ${trendColor}">${coin.change24h ? coin.change24h.toFixed(2) : 'N/A'}%</div>
-            <div>$${coin.marketCap ? coin.marketCap.toLocaleString() : 'N/A'}</div>
+            <div>${formatMarketCap(coin.marketCap)}</div>
             <div>
                 <canvas class="trend-chart" width="60" height="20"></canvas>
             </div>
@@ -285,8 +319,9 @@ function rankSuggestions(input) {
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
             const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 6 : 0;
             const cached = coinCache.get(coin.id);
-            const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0; // Boost popular coins
+            const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0;
             const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
+            if (contractMatch && score < 6) console.log(`Contract mismatch for ${lowerInput}: ${coin.name} (${coin.id})`);
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
@@ -337,7 +372,7 @@ async function addCoin(coinIdFromDropdown = null) {
     addButton.disabled = true;
     addButton.textContent = 'Adding...';
 
-    let coinId = coinIdFromDropdown; // Use dropdown ID directly if provided
+    let coinId = coinIdFromDropdown;
     if (!coinId) {
         const isContract = /^0x[a-fA-F0-9]{40}$/.test(query) || /^[A-Za-z0-9]{32,44}$/.test(query);
         if (isContract) {
@@ -428,6 +463,8 @@ function debounce(func, wait) {
 fetchCoinList().then(() => {
     loadCustomWatchlist();
     fetchTrendingWatchlists();
+    fetchFearAndGreed();
+    fetchHeaderPrices();
 });
 
 setInterval(async () => {
@@ -435,6 +472,8 @@ setInterval(async () => {
     if (now - lastUpdate < 60000) return;
     console.log('Refreshing trending watchlists...');
     await fetchTrendingWatchlists();
+    fetchHeaderPrices();
+    fetchFearAndGreed();
 }, 60000);
 
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {
