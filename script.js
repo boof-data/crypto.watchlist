@@ -1,4 +1,4 @@
-console.log('Script.js loaded - starting execution'); // Debug to confirm script starts
+console.log('Script.js loaded - starting execution');
 
 // Define critical functions at the top for global access
 window.addCoin = async function(coinIdFromDropdown = null) {
@@ -69,7 +69,7 @@ let lastPrices = null;
 let lastPriceFetchTime = 0;
 const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-window.updatePortfolio = async function() {
+window.updatePortfolio = debounce(async function() {
     console.log('updatePortfolio called');
     const solWallet = document.getElementById('solWallet').value.trim();
     const xrpWallet = document.getElementById('xrpWallet').value.trim();
@@ -90,7 +90,7 @@ window.updatePortfolio = async function() {
     }
     console.log('Total portfolio value:', totalValue);
     document.getElementById('portfolio-value').textContent = `$${totalValue.toFixed(2)}`;
-};
+}, 1000); // Debounce 1 second
 
 let customWatchlist = [];
 let trendingCrypto = [];
@@ -103,15 +103,16 @@ let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
 const HELIUS_API_KEY = 'ec5f4755-4618-4e4f-af89-1381861152c1'; // Your new Helius API key
+const COINGECKO_API = 'https://api.coingecko.com/api/v3';
 const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-console.log('HELIUS_API_KEY set to:', HELIUS_API_KEY); // Debug to confirm key
+console.log('HELIUS_API_KEY set to:', HELIUS_API_KEY);
 
 async function queueFetch(url, retries = 3) {
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
-            await new Promise(res => setTimeout(res, 500)); // Increased delay to 500ms
+            await new Promise(res => setTimeout(res, 500)); // Delay to avoid rate limits
             for (let i = 0; i < retries; i++) {
                 try {
                     console.log(`Fetching: ${url}`);
@@ -119,7 +120,7 @@ async function queueFetch(url, retries = 3) {
                     if (!response.ok) {
                         if (response.status === 429) {
                             console.warn(`Rate limit hit for ${url}, retrying (${i+1}/${retries})...`);
-                            await new Promise(res => setTimeout(res, 2000 * (i + 1))); // Longer backoff
+                            await new Promise(res => setTimeout(res, 2000 * (i + 1))); // Exponential backoff
                             continue;
                         }
                         throw new Error(`HTTP error: ${response.status}`);
@@ -155,7 +156,7 @@ async function fetchCoinList() {
             console.log('Loaded coin list from cache');
             return;
         }
-        const data = await queueFetch('https://api.coingecko.com/api/v3/coins/list?include_platform=true');
+        const data = await queueFetch(`${COINGECKO_API}/coins/list?include_platform=true`);
         if (data) {
             coinList = data;
             setCachedData('coinList', data);
@@ -172,7 +173,7 @@ async function fetchCryptoData(coinId) {
         const now = Date.now();
         if (now - (cached.lastFetched || 0) < CACHE_TTL) return cached;
     }
-    const data = await queueFetch(`https://api.coingecko.com/api/v3/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`);
+    const data = await queueFetch(`${COINGECKO_API}/coins/${coinId}?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=true`);
     if (data) {
         const coinData = {
             id: data.id,
@@ -200,7 +201,7 @@ async function fetchAllPrices() {
             console.log('Using cached all prices:', cached);
             return cached;
         }
-        const data = await queueFetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd');
+        const data = await queueFetch(`${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd`);
         if (data) {
             console.log('Fetched all prices:', data);
             setCachedData('allPrices', data);
@@ -236,7 +237,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
             updateTrendingWatchlist();
             return;
         }
-        const data = await queueFetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true');
+        const data = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true`);
         if (data) {
             const nonStableCoins = data.filter(coin => !stableCoinIds.includes(coin.id));
             trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
@@ -251,7 +252,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
             }));
             // Expanded list of known ETH and SOL tokens in top 100
             const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao', 'curve-dao-token'];
-            const solIds = ['solana', 'serum', 'raydium', 'orca', 'stepn', 'jito-staked-sol', 'jupiter-exchange-solana', 'pyth-network', 'bonk', 'marinade-staked-sol'];
+            const solIds = ['solana', 'stepn', 'jito-staked-sol', 'jupiter-exchange-solana', 'pyth-network', 'bonk', 'marinade-staked-sol', 'wormhole', 'helium', 'render-token'];
             trendingETH = nonStableCoins
                 .filter(coin => ethIds.includes(coin.id))
                 .slice(0, 10)
