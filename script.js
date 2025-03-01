@@ -71,6 +71,7 @@ window.updatePortfolio = async function() {
     let totalValue = 0;
 
     const prices = await fetchAllPrices(); // Fetch all prices once
+    console.log('Prices for portfolio:', prices);
 
     if (solWallet) {
         console.log('Fetching Solana balance for:', solWallet);
@@ -232,9 +233,9 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-            // Use known IDs for ETH and SOL tokens since top 100 may not reflect platform specifics
-            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu']; // Example ETH tokens
-            const solIds = ['solana', 'serum', 'raydium', 'orca']; // Example SOL tokens
+            // Expanded list of known ETH and SOL tokens in top 100
+            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao', 'curve-dao-token'];
+            const solIds = ['solana', 'serum', 'raydium', 'orca', 'stepn', 'jito-staked-sol', 'jupiter-exchange-solana', 'pyth-network', 'bonk', 'marinade-staked-sol'];
             trendingETH = nonStableCoins
                 .filter(coin => ethIds.includes(coin.id))
                 .slice(0, 10)
