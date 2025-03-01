@@ -232,13 +232,11 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-            // Use CoinGecko IDs directly for ETH and SOL tokens
+            // Use known IDs for ETH and SOL tokens since top 100 may not reflect platform specifics
+            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu']; // Example ETH tokens
+            const solIds = ['solana', 'serum', 'raydium', 'orca']; // Example SOL tokens
             trendingETH = nonStableCoins
-                .filter(coin => {
-                    const isEthToken = coinList.some(c => c.id === coin.id && c.platforms?.ethereum);
-                    if (isEthToken) console.log(`ETH token matched: ${coin.id}`);
-                    return isEthToken;
-                })
+                .filter(coin => ethIds.includes(coin.id))
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -251,11 +249,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     image: coin.image
                 }));
             trendingSOL = nonStableCoins
-                .filter(coin => {
-                    const isSolToken = coinList.some(c => c.id === coin.id && c.platforms?.solana);
-                    if (isSolToken) console.log(`SOL token matched: ${coin.id}`);
-                    return isSolToken;
-                })
+                .filter(coin => solIds.includes(coin.id))
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -316,13 +310,9 @@ async function fetchHeaderPrices() {
     try {
         const prices = await fetchAllPrices();
         console.log('Header prices data:', prices);
-        const btcPrice = prices.bitcoin.usd;
-        const ethPrice = prices.ethereum.usd;
-        const solPrice = prices.solana.usd;
-        console.log('Parsed header prices:', { btcPrice, ethPrice, solPrice });
-        document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${btcPrice.toLocaleString()}`;
-        document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${ethPrice.toLocaleString()}`;
-        document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${solPrice.toLocaleString()}`;
+        document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${prices.bitcoin.usd.toLocaleString()}`;
+        document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${prices.ethereum.usd.toLocaleString()}`;
+        document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${prices.solana.usd.toLocaleString()}`;
         console.log('Header prices set successfully');
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
@@ -345,8 +335,8 @@ async function fetchSolanaBalances(address, prices) {
         if (!solBal.result?.value) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
         console.log('SOL value in SOL:', solValue);
-        const solUsdPrice = prices.solana?.usd || 0;
-        console.log('SOL USD price:', solUsdPrice);
+        const solUsdPrice = prices.solana.usd || 0;
+        console.log('SOL USD price from prices:', solUsdPrice);
         let totalValue = solValue * solUsdPrice;
 
         console.log('Fetching SOL token balances for:', address);
@@ -399,8 +389,8 @@ async function fetchXRPBalances(address, prices) {
             if (data.id === 1 && data.result?.account_data?.Balance) {
                 const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
                 console.log('XRP value in XRP:', xrpValue);
-                const xrpUsdPrice = prices.ripple?.usd || 0;
-                console.log('XRP USD price:', xrpUsdPrice);
+                const xrpUsdPrice = prices.ripple.usd || 0;
+                console.log('XRP USD price from prices:', xrpUsdPrice);
                 totalValue += xrpValue * xrpUsdPrice;
                 console.log('Total XRP value:', totalValue);
                 ws.close();
