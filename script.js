@@ -8,7 +8,10 @@ let requestQueue = Promise.resolve();
 let lastUpdate = 0;
 let activeTrendingTab = 'crypto';
 const stableCoinIds = ['tether', 'usd-coin', 'dai', 'binance-usd', 'true-usd'];
-const HELIUS_API_KEY = process.env.ec5f4755-4618-4e4f-af89-1381861152c1;
+// Use environment variable or fallback to your new key for testing
+const HELIUS_API_KEY = typeof process !== 'undefined' && process.env.HELIUS_API_KEY 
+    ? process.env.HELIUS_API_KEY 
+    : ec5f4755-4618-4e4f-af89-1381861152c1; // Replace with your actual new key
 const COINGECKO_PROXY = 'https://corsproxy.io/?';
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
@@ -296,7 +299,8 @@ async function fetchXRPBalances(address) {
     });
 }
 
-async function updatePortfolio() {
+// Make updatePortfolio globally accessible
+window.updatePortfolio = async function() {
     const solWallet = document.getElementById('solWallet').value.trim();
     const xrpWallet = document.getElementById('xrpWallet').value.trim();
     let totalValue = 0;
@@ -326,7 +330,7 @@ async function initPage() {
     await loadCustomWatchlist();
     await fetchFearAndGreed();
     loadSavedWallets();
-    setTimeout(updatePortfolio, 2000); // Defer portfolio update further
+    setTimeout(window.updatePortfolio, 2000); // Defer portfolio update further
 }
 
 function formatMarketCap(marketCap) {
@@ -534,13 +538,14 @@ function showSuggestions(input) {
         option.onclick = () => {
             document.getElementById('coinInput').value = coin.id;
             dropdown.innerHTML = '';
-            addCoin(coin.id);
+            window.addCoin(coin.id);
         };
         dropdown.appendChild(option);
     });
 }
 
-async function addCoin(coinIdFromDropdown = null) {
+// Make addCoin globally accessible
+window.addCoin = async function(coinIdFromDropdown = null) {
     const input = document.getElementById('coinInput');
     const query = coinIdFromDropdown || input.value.trim().toLowerCase();
     const dropdown = document.getElementById('suggestions');
@@ -655,7 +660,7 @@ setInterval(async () => {
     await fetchTrendingWatchlists();
     await fetchHeaderPrices();
     await fetchFearAndGreed();
-    await updatePortfolio();
+    await window.updatePortfolio();
 }, 60000);
 
 document.getElementById('coinInput').addEventListener('input', debounce((e) => {
