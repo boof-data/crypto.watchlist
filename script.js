@@ -122,7 +122,7 @@ async function queueFetch(url, retries = 3) {
                             'Accept': 'application/json'
                         }
                     });
-                    console.log(`Response status: ${response.status}, headers:`, Object.fromEntries(response.headers));
+                    console.log(`Response status: ${response.status}`);
                     if (!response.ok) {
                         if (response.status === 429) {
                             console.warn(`Rate limit hit for ${url}, retrying (${i+1}/${retries})...`);
@@ -132,7 +132,7 @@ async function queueFetch(url, retries = 3) {
                         throw new Error(`HTTP error: ${response.status}`);
                     }
                     const data = await response.json();
-                    console.log(`Fetched data from ${url}:`, JSON.stringify(data));
+                    console.log(`Fetched data from ${url}:`, data);
                     resolve(data);
                     return;
                 } catch (error) {
@@ -207,17 +207,15 @@ async function fetchAllPrices() {
             console.log('Using cached all prices:', cached);
             return cached;
         }
-        const url = `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd&timestamp=${Date.now()}`; // Cache buster
+        const url = `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd×tamp=${Date.now()}`;
         const data = await queueFetch(url);
-        console.log('Raw price data from API:', JSON.stringify(data));
         if (data && typeof data === 'object') {
             const prices = {
-                bitcoin: { usd: data.bitcoin && typeof data.bitcoin.usd === 'number' ? data.bitcoin.usd : 0 },
-                ethereum: { usd: data.ethereum && typeof data.ethereum.usd === 'number' ? data.ethereum.usd : 0 },
-                solana: { usd: data.solana && typeof data.solana.usd === 'number' ? data.solana.usd : 0 },
-                ripple: { usd: data.ripple && typeof data.ripple.usd === 'number' ? data.ripple.usd : 0 }
+                bitcoin: { usd: data.bitcoin?.usd || 0 },
+                ethereum: { usd: data.ethereum?.usd || 0 },
+                solana: { usd: data.solana?.usd || 0 },
+                ripple: { usd: data.ripple?.usd || 0 }
             };
-            console.log('Processed prices:', JSON.stringify(prices));
             setCachedData('allPrices', prices);
             return prices;
         }
@@ -251,7 +249,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
             updateTrendingWatchlist();
             return;
         }
-        const data = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=true`);
+        const data = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true`);
         if (data) {
             const nonStableCoins = data.filter(coin => !stableCoinIds.includes(coin.id));
             trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
@@ -264,10 +262,13 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao'];
-            const solIds = ['solana', 'jupiter', 'pyth-network', 'helium', 'bonk', 'wormhole', 'stepn', 'jito-staked-sol', 'marinade-staked-sol', 'render'];
-            trendingETH = nonStableCoins
-                .filter(coin => ethIds.includes(coin.id))
+
+            // Fetch ETH and SOL tokens dynamically
+            const ethTokens = coinList
+                .filter(c => c.platforms?.ethereum && c.platforms.ethereum !== '' && !stableCoinIds.includes(c.id))
+                .map(c => nonStableCoins.find(m => m.id === c.id))
+                .filter(Boolean)
+                .sort((a, b) => b.market_cap - a.market_cap)
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -279,8 +280,12 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                     image: coin.image
                 }));
-            trendingSOL = nonStableCoins
-                .filter(coin => solIds.includes(coin.id))
+
+            const solTokens = coinList
+                .filter(c => c.platforms?.solana && c.platforms.solana !== '' && !stableCoinIds.includes(c.id))
+                .map(c => nonStableCoins.find(m => m.id === c.id))
+                .filter(Boolean)
+                .sort((a, b) => b.market_cap - a.market_cap)
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -292,6 +297,10 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                     image: coin.image
                 }));
+
+            trendingETH = ethTokens;
+            trendingSOL = solTokens;
+
             console.log('Trending watchlists fetched:', { crypto: trendingCrypto.length, eth: trendingETH.length, sol: trendingSOL.length });
             trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
             trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
@@ -340,15 +349,12 @@ async function fetchFearAndGreed() {
 async function fetchHeaderPrices() {
     try {
         const prices = await getCachedOrFetchPrices();
-        console.log('Header prices raw data:', prices);
         const btcPrice = prices.bitcoin?.usd || 0;
         const ethPrice = prices.ethereum?.usd || 0;
         const solPrice = prices.solana?.usd || 0;
-        console.log('Extracted header prices:', { btcPrice, ethPrice, solPrice });
         document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $${btcPrice.toLocaleString()}`;
         document.getElementById('eth-price').innerHTML = `<img src="https://cryptologos.cc/logos/ethereum-eth-logo.png" alt="ETH" class="token-logo"> $${ethPrice.toLocaleString()}`;
         document.getElementById('sol-price').innerHTML = `<img src="https://cryptologos.cc/logos/solana-sol-logo.png" alt="SOL" class="token-logo"> $${solPrice.toLocaleString()}`;
-        console.log('Header prices set successfully');
     } catch (error) {
         console.error('Failed to fetch header prices:', error);
         document.getElementById('btc-price').innerHTML = `<img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" alt="BTC" class="token-logo"> $--`;
@@ -359,44 +365,32 @@ async function fetchHeaderPrices() {
 
 async function fetchSolanaBalances(address, prices) {
     try {
-        console.log('Fetching SOL balance for:', address);
         const solBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getBalance", params: [address] })
         });
         const solBal = await solBalResponse.json();
-        console.log('SOL balance response:', solBal);
         if (!solBal.result?.value) throw new Error('No balance data returned from Solana');
         const solValue = solBal.result.value / 1e9; // Lamports to SOL
-        console.log('SOL value in SOL:', solValue);
-        const solUsdPrice = prices.solana?.usd || 0;
-        console.log('SOL USD price from prices:', solUsdPrice);
-        let totalValue = solValue * solUsdPrice;
+        let totalValue = solValue * (prices.solana?.usd || 0);
 
-        console.log('Fetching SOL token balances for:', address);
         const tokenBalResponse = await fetch(`https://rpc.helius.xyz/?api-key=${HELIUS_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getTokenAccountsByOwner", params: [address, { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }, { encoding: "jsonParsed" }] })
         });
         const tokenBal = await tokenBalResponse.json();
-        console.log('SOL token balance response:', tokenBal);
         const tokens = tokenBal.result?.value || [];
         for (const token of tokens) {
             const mint = token.account.data.parsed.info.mint;
             const amount = token.account.data.parsed.info.tokenAmount.uiAmount;
-            const coin = coinList.find(c => c.platforms && c.platforms.solana === mint);
+            const coin = coinList.find(c => c.platforms?.solana === mint);
             if (coin) {
                 const priceData = await fetchCryptoData(coin.id);
-                const tokenValue = amount * (priceData?.price || 0);
-                totalValue += tokenValue;
-                console.log(`Added token ${coin.id}: ${amount} * ${priceData?.price || 0} = ${tokenValue}`);
-            } else {
-                console.log(`No CoinGecko match for Solana mint: ${mint}`);
+                totalValue += amount * (priceData?.price || 0);
             }
         }
-        console.log('Total SOL value:', totalValue);
         return totalValue;
     } catch (error) {
         console.error(`Failed to fetch Solana wallet ${address}:`, error);
@@ -406,7 +400,6 @@ async function fetchSolanaBalances(address, prices) {
 
 async function fetchXRPBalances(address, prices) {
     return new Promise((resolve) => {
-        console.log('Fetching XRP balance for:', address);
         const ws = new WebSocket('wss://xrplcluster.com');
         ws.onopen = () => {
             ws.send(JSON.stringify({
@@ -420,18 +413,12 @@ async function fetchXRPBalances(address, prices) {
 
         ws.onmessage = async (event) => {
             const data = JSON.parse(event.data);
-            console.log('XRP balance response:', data);
             if (data.id === 1 && data.result?.account_data?.Balance) {
                 const xrpValue = parseFloat(data.result.account_data.Balance) / 1e6; // Drops to XRP
-                console.log('XRP value in XRP:', xrpValue);
-                const xrpUsdPrice = prices.ripple?.usd || 0;
-                console.log('XRP USD price from prices:', xrpUsdPrice);
-                totalValue += xrpValue * xrpUsdPrice;
-                console.log('Total XRP value:', totalValue);
+                totalValue += xrpValue * (prices.ripple?.usd || 0);
                 ws.close();
                 resolve(totalValue);
             } else {
-                console.warn('Invalid XRP response:', data);
                 ws.close();
                 resolve(0);
             }
@@ -538,9 +525,7 @@ function updateTrendingWatchlist() {
     const tbody = document.getElementById('trendingWatchlistBody');
     tbody.innerHTML = '';
     const activeList = activeTrendingTab === 'crypto' ? trendingCrypto : activeTrendingTab === 'eth' ? trendingETH : trendingSOL;
-    console.log(`Updating trending watchlist for ${activeTrendingTab}:`, activeList.length);
     if (!activeList || !activeList.length) {
-        console.warn(`No data for ${activeTrendingTab} tab`);
         tbody.innerHTML = '<div>No tokens available</div>';
         return;
     }
@@ -638,11 +623,14 @@ function rankSuggestions(input) {
             const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 5 : coin.symbol.toLowerCase().includes(lowerInput) ? 2 : 0;
             const nameMatch = coin.name.toLowerCase() === lowerInput ? 4 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
-            const contractMatch = coin.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0;
+            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0;
             const cached = coinCache.get(coin.id);
             const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0;
-            const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
-            if (contractMatch && score < 10) console.log(`Contract match for ${lowerInput}: ${coin.name} (${coin.id}), score: ${score}`);
+            let score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
+            // Boost canonical PEPE (Ethereum) when searching "PEPE"
+            if (lowerInput === 'pepe' && coin.id === 'pepe' && coin.platforms?.ethereum) {
+                score += 10; // Prioritize the Ethereum-based PEPE
+            }
             return score > 0 ? { ...coin, score } : null;
         })
         .filter(Boolean)
