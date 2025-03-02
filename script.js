@@ -202,17 +202,17 @@ async function fetchAllPrices() {
             return cached;
         }
         const data = await queueFetch(`${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd`);
+        console.log('Raw price data from API:', data);
         if (data) {
-            console.log('Raw fetched all prices:', data);
-            const validatedData = {
+            const prices = {
                 bitcoin: { usd: data.bitcoin?.usd || 0 },
                 ethereum: { usd: data.ethereum?.usd || 0 },
                 solana: { usd: data.solana?.usd || 0 },
                 ripple: { usd: data.ripple?.usd || 0 }
             };
-            console.log('Validated prices:', validatedData);
-            setCachedData('allPrices', validatedData);
-            return validatedData;
+            console.log('Processed prices:', prices);
+            setCachedData('allPrices', prices);
+            return prices;
         }
         console.warn('No price data returned from API');
         return cached || { bitcoin: { usd: 0 }, ethereum: { usd: 0 }, solana: { usd: 0 }, ripple: { usd: 0 } };
@@ -257,9 +257,9 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-            // Expanded list of known ETH and SOL tokens in top 100 (March 2025)
-            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao', 'curve-dao-token'];
-            const solIds = ['solana', 'jupiter', 'pyth-network', 'helium', 'bonk', 'wormhole', 'stepn', 'jito-staked-sol', 'marinade-staked-sol', 'render-token'];
+            // Updated ETH and SOL token IDs based on your live top 100
+            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao']; // Adjusted based on your log
+            const solIds = ['solana', 'jupiter', 'pyth-network', 'helium', 'bonk', 'wormhole', 'stepn', 'jito-staked-sol', 'marinade-staked-sol', 'render']; // Adjusted based on your log
             trendingETH = nonStableCoins
                 .filter(coin => ethIds.includes(coin.id))
                 .slice(0, 10)
@@ -632,7 +632,7 @@ function rankSuggestions(input) {
             const symbolMatch = coin.symbol.toLowerCase() === lowerInput ? 5 : coin.symbol.toLowerCase().includes(lowerInput) ? 2 : 0;
             const nameMatch = coin.name.toLowerCase() === lowerInput ? 4 : coin.name.toLowerCase().includes(lowerInput) ? 1 : 0;
             const idMatch = coin.id === lowerInput ? 3 : coin.id.includes(lowerInput) ? 1 : 0;
-            const contractMatch = coin.platforms && Object.values(coin.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0;
+            const contractMatch = coin.platforms && Object.values(c.platforms).some(addr => addr.toLowerCase() === lowerInput) ? 10 : 0;
             const cached = coinCache.get(coin.id);
             const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0;
             const score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
