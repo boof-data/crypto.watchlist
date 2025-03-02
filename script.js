@@ -249,7 +249,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
             updateTrendingWatchlist();
             return;
         }
-        const data = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=true`);
+        const data = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=500&page=1&sparkline=true`);
         if (data) {
             const nonStableCoins = data.filter(coin => !stableCoinIds.includes(coin.id));
             trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
@@ -263,10 +263,15 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 image: coin.image
             }));
 
-            // Fetch ETH and SOL tokens dynamically
-            const ethTokens = coinList
-                .filter(c => c.platforms?.ethereum && c.platforms.ethereum !== '' && !stableCoinIds.includes(c.id))
-                .map(c => nonStableCoins.find(m => m.id === c.id))
+            // Fetch ETH tokens dynamically
+            const ethCandidates = coinList.filter(c => c.platforms?.ethereum && c.platforms.ethereum !== '' && !stableCoinIds.includes(c.id));
+            console.log(`ETH candidates found: ${ethCandidates.length}`);
+            const ethTokens = ethCandidates
+                .map(c => {
+                    const marketCoin = nonStableCoins.find(m => m.id === c.id);
+                    if (marketCoin) return marketCoin;
+                    return null;
+                })
                 .filter(Boolean)
                 .sort((a, b) => b.market_cap - a.market_cap)
                 .slice(0, 10)
@@ -280,10 +285,17 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                     image: coin.image
                 }));
+            console.log(`ETH tokens after filtering: ${ethTokens.length}`);
 
-            const solTokens = coinList
-                .filter(c => c.platforms?.solana && c.platforms.solana !== '' && !stableCoinIds.includes(c.id))
-                .map(c => nonStableCoins.find(m => m.id === c.id))
+            // Fetch SOL tokens dynamically
+            const solCandidates = coinList.filter(c => c.platforms?.solana && c.platforms.solana !== '' && !stableCoinIds.includes(c.id));
+            console.log(`SOL candidates found: ${solCandidates.length}`);
+            const solTokens = solCandidates
+                .map(c => {
+                    const marketCoin = nonStableCoins.find(m => m.id === c.id);
+                    if (marketCoin) return marketCoin;
+                    return null;
+                })
                 .filter(Boolean)
                 .sort((a, b) => b.market_cap - a.market_cap)
                 .slice(0, 10)
@@ -297,6 +309,7 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                     image: coin.image
                 }));
+            console.log(`SOL tokens after filtering: ${solTokens.length}`);
 
             trendingETH = ethTokens;
             trendingSOL = solTokens;
@@ -627,9 +640,11 @@ function rankSuggestions(input) {
             const cached = coinCache.get(coin.id);
             const marketCapWeight = cached && cached.marketCap ? Math.log10(cached.marketCap) / 10 : 0;
             let score = Math.max(symbolMatch, nameMatch, idMatch, contractMatch) + marketCapWeight;
-            // Boost canonical PEPE (Ethereum) when searching "PEPE"
-            if (lowerInput === 'pepe' && coin.id === 'pepe' && coin.platforms?.ethereum) {
-                score += 10; // Prioritize the Ethereum-based PEPE
+            // Prioritize canonical Ethereum-based PEPE
+            if (lowerInput === 'pepe' && coin.id === 'pepe' && coin.platforms?.ethereum === '0x6982508145454ce325ddbe47a25d4ec3d2311933') {
+                score += 20; // High boost for exact match
+            } else if (lowerInput === 'pepe' && coin.symbol.toLowerCase() === 'pepe') {
+                score += 5; // Lesser boost for other PEPE tokens
             }
             return score > 0 ? { ...coin, score } : null;
         })
@@ -649,11 +664,14 @@ function showSuggestions(input) {
         return;
     }
 
-    matches.forEach(coin => {
-        const cachedCoin = coinCache.get(coin.id) || coin;
+    matches.forEach(async (coin) => {
+        let coinData = coinCache.get(coin.id);
+        if (!coinData) {
+            coinData = await fetchCryptoData(coin.id); // Fetch data to get image
+        }
         const option = document.createElement('div');
         option.innerHTML = `
-            <img src="${cachedCoin.image || 'https://placehold.co/24x24'}" alt="${coin.name}" class="dropdown-logo">
+            <img src="${coinData?.image || 'https://placehold.co/24x24'}" alt="${coin.name}" class="dropdown-logo">
             ${coin.name} (${coin.symbol.toUpperCase()})
         `;
         option.className = 'suggestion';
