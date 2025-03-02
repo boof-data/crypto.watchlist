@@ -109,14 +109,14 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 // Predefined top tokens by chain (based on market cap, excluding stablecoins)
 const topEthTokens = ['uniswap', 'chainlink', 'aave', 'maker', 'lido-dao', 'the-graph', 'render-token', 'pendle', 'curve-dao-token', '1inch'];
-const topSolTokens = ['jupiter-exchange-solana', 'pyth-network', 'raydium', 'helium', 'bonk', 'stepn', 'jito-governance-token', 'marinade-staked-sol', 'orca', 'drift'];
+const topSolTokens = ['jupiter-exchange-solana', 'pyth-network', 'raydium', 'helium', 'bonk', 'stepn', 'jito-governance-token', 'marinade-staked-sol', 'wormhole', 'drift-protocol'];
 
 console.log('HELIUS_API_KEY set to:', HELIUS_API_KEY);
 
 async function queueFetch(url, retries = 3) {
     return new Promise((resolve) => {
         requestQueue = requestQueue.then(async () => {
-            await new Promise(res => setTimeout(res, 500)); // Delay to avoid rate limits
+            await new Promise(res => setTimeout(res, 1000)); // Increased delay to 1s
             for (let i = 0; i < retries; i++) {
                 try {
                     console.log(`Fetching: ${url}`);
@@ -130,7 +130,7 @@ async function queueFetch(url, retries = 3) {
                     if (!response.ok) {
                         if (response.status === 429) {
                             console.warn(`Rate limit hit for ${url}, retrying (${i+1}/${retries})...`);
-                            await new Promise(res => setTimeout(res, 2000 * (i + 1))); // Exponential backoff
+                            await new Promise(res => setTimeout(res, 3000 * (i + 1))); // Increased backoff to 3s+
                             continue;
                         }
                         throw new Error(`HTTP error: ${response.status}`);
@@ -211,7 +211,7 @@ async function fetchAllPrices() {
             console.log('Using cached all prices:', cached);
             return cached;
         }
-        const url = `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd×tamp=${Date.now()}`;
+        const url = `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd`;
         const data = await queueFetch(url);
         if (data && typeof data === 'object') {
             const prices = {
@@ -253,11 +253,26 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
             updateTrendingWatchlist();
             return;
         }
-        // Fetch top crypto
-        const cryptoData = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=true`);
-        if (cryptoData) {
-            trendingCrypto = cryptoData
-                .filter(coin => !stableCoinIds.includes(coin.id))
+        // Single API call for all trending tokens + header prices
+        const allIds = ['bitcoin', 'ethereum', 'solana', 'ripple', ...topEthTokens, ...topSolTokens].join(',');
+        const data = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&ids=${allIds}&order=market_cap_desc&per_page=34&page=1&sparkline=true`);
+        if (data) {
+            const nonStableCoins = data.filter(coin => !stableCoinIds.includes(coin.id));
+            // Top Crypto (overall market cap)
+            trendingCrypto = nonStableCoins.slice(0, 10).map(coin => ({
+                id: coin.id,
+                name: coin.name,
+                symbol: coin.symbol.toUpperCase(),
+                price: coin.current_price,
+                change24h: coin.price_change_percentage_24h,
+                marketCap: coin.market_cap,
+                sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
+                image: coin.image
+            }));
+
+            // ETH Tokens
+            trendingETH = nonStableCoins
+                .filter(coin => topEthTokens.includes(coin.id))
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -269,14 +284,10 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                     image: coin.image
                 }));
-        }
 
-        // Fetch ETH tokens
-        const ethIds = topEthTokens.join(',');
-        const ethData = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&ids=${ethIds}&order=market_cap_desc&per_page=10&page=1&sparkline=true`);
-        if (ethData) {
-            trendingETH = ethData
-                .filter(coin => !stableCoinIds.includes(coin.id))
+            // SOL Tokens
+            trendingSOL = nonStableCoins
+                .filter(coin => topSolTokens.includes(coin.id))
                 .slice(0, 10)
                 .map(coin => ({
                     id: coin.id,
@@ -288,33 +299,27 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                     sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                     image: coin.image
                 }));
-        }
 
-        // Fetch SOL tokens
-        const solIds = topSolTokens.join(',');
-        const solData = await queueFetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&ids=${solIds}&order=market_cap_desc&per_page=10&page=1&sparkline=true`);
-        if (solData) {
-            trendingSOL = solData
-                .filter(coin => !stableCoinIds.includes(coin.id))
-                .slice(0, 10)
-                .map(coin => ({
-                    id: coin.id,
-                    name: coin.name,
-                    symbol: coin.symbol.toUpperCase(),
-                    price: coin.current_price,
-                    change24h: coin.price_change_percentage_24h,
-                    marketCap: coin.market_cap,
-                    sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
-                    image: coin.image
-                }));
-        }
+            // Cache header prices from this fetch
+            const prices = {
+                bitcoin: { usd: nonStableCoins.find(c => c.id === 'bitcoin')?.current_price || 0 },
+                ethereum: { usd: nonStableCoins.find(c => c.id === 'ethereum')?.current_price || 0 },
+                solana: { usd: nonStableCoins.find(c => c.id === 'solana')?.current_price || 0 },
+                ripple: { usd: nonStableCoins.find(c => c.id === 'ripple')?.current_price || 0 }
+            };
+            setCachedData('allPrices', prices);
+            lastPrices = prices;
+            lastPriceFetchTime = Date.now();
 
-        console.log('Trending watchlists fetched:', { crypto: trendingCrypto.length, eth: trendingETH.length, sol: trendingSOL.length });
-        trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
-        trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
-        trendingSOL.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
-        setCachedData('trendingWatchlists', { crypto: trendingCrypto, eth: trendingETH, sol: trendingSOL });
-        updateTrendingWatchlist();
+            console.log('Trending watchlists fetched:', { crypto: trendingCrypto.length, eth: trendingETH.length, sol: trendingSOL.length });
+            trendingCrypto.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+            trendingETH.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+            trendingSOL.forEach(coin => coinCache.set(coin.id, { ...coin, lastFetched: Date.now() }));
+            setCachedData('trendingWatchlists', { crypto: trendingCrypto, eth: trendingETH, sol: trendingSOL });
+            updateTrendingWatchlist();
+        } else {
+            console.warn('No data returned from trending watchlists API');
+        }
     } catch (error) {
         console.error('Failed to fetch trending watchlists:', error);
     }
@@ -447,14 +452,14 @@ function loadSavedWallets() {
 async function initPage() {
     console.log('Initializing page...');
     await fetchCoinList();
-    await fetchTrendingWatchlists(true); // Force initial fetch
+    await fetchTrendingWatchlists(true); // Force initial fetch, includes header prices
     await fetchHeaderPrices();
     await loadCustomWatchlist();
     await fetchFearAndGreed();
     loadSavedWallets();
     setTimeout(window.updatePortfolio, 2000); // Defer portfolio update
     // Pre-cache popular coins for search
-    const popularCoins = ['bitcoin', 'ethereum', 'solana', 'pepe', ...topEthTokens, ...topSolTokens];
+    const popularCoins = ['pepe'];
     for (const id of popularCoins) {
         await fetchCryptoData(id);
     }
