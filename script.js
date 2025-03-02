@@ -116,7 +116,13 @@ async function queueFetch(url, retries = 3) {
             for (let i = 0; i < retries; i++) {
                 try {
                     console.log(`Fetching: ${url}`);
-                    const response = await fetch(`${COINGECKO_PROXY}${encodeURIComponent(url)}`);
+                    const response = await fetch(`${COINGECKO_PROXY}${encodeURIComponent(url)}`, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                            'Accept': 'application/json'
+                        }
+                    });
+                    console.log(`Response status: ${response.status}, headers:`, Object.fromEntries(response.headers));
                     if (!response.ok) {
                         if (response.status === 429) {
                             console.warn(`Rate limit hit for ${url}, retrying (${i+1}/${retries})...`);
@@ -201,20 +207,21 @@ async function fetchAllPrices() {
             console.log('Using cached all prices:', cached);
             return cached;
         }
-        const data = await queueFetch(`${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd`);
+        const url = `${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd&timestamp=${Date.now()}`; // Cache buster
+        const data = await queueFetch(url);
         console.log('Raw price data from API:', JSON.stringify(data));
         if (data && typeof data === 'object') {
             const prices = {
-                bitcoin: { usd: data.bitcoin && data.bitcoin.usd ? data.bitcoin.usd : 0 },
-                ethereum: { usd: data.ethereum && data.ethereum.usd ? data.ethereum.usd : 0 },
-                solana: { usd: data.solana && data.solana.usd ? data.solana.usd : 0 },
-                ripple: { usd: data.ripple && data.ripple.usd ? data.ripple.usd : 0 }
+                bitcoin: { usd: data.bitcoin && typeof data.bitcoin.usd === 'number' ? data.bitcoin.usd : 0 },
+                ethereum: { usd: data.ethereum && typeof data.ethereum.usd === 'number' ? data.ethereum.usd : 0 },
+                solana: { usd: data.solana && typeof data.solana.usd === 'number' ? data.solana.usd : 0 },
+                ripple: { usd: data.ripple && typeof data.ripple.usd === 'number' ? data.ripple.usd : 0 }
             };
             console.log('Processed prices:', JSON.stringify(prices));
             setCachedData('allPrices', prices);
             return prices;
         }
-        console.warn('No valid price data returned from API');
+        console.warn('No valid price data returned from API, falling back to cache');
         return cached || { bitcoin: { usd: 0 }, ethereum: { usd: 0 }, solana: { usd: 0 }, ripple: { usd: 0 } };
     } catch (error) {
         console.error('Failed to fetch all prices:', error);
