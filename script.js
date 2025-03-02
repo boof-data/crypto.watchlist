@@ -126,7 +126,7 @@ async function queueFetch(url, retries = 3) {
                         throw new Error(`HTTP error: ${response.status}`);
                     }
                     const data = await response.json();
-                    console.log(`Fetched data from ${url}:`, data);
+                    console.log(`Fetched data from ${url}:`, JSON.stringify(data));
                     resolve(data);
                     return;
                 } catch (error) {
@@ -202,19 +202,19 @@ async function fetchAllPrices() {
             return cached;
         }
         const data = await queueFetch(`${COINGECKO_API}/simple/price?ids=bitcoin,ethereum,solana,ripple&vs_currencies=usd`);
-        console.log('Raw price data from API:', data);
-        if (data) {
+        console.log('Raw price data from API:', JSON.stringify(data));
+        if (data && typeof data === 'object') {
             const prices = {
-                bitcoin: { usd: data.bitcoin?.usd || 0 },
-                ethereum: { usd: data.ethereum?.usd || 0 },
-                solana: { usd: data.solana?.usd || 0 },
-                ripple: { usd: data.ripple?.usd || 0 }
+                bitcoin: { usd: data.bitcoin && data.bitcoin.usd ? data.bitcoin.usd : 0 },
+                ethereum: { usd: data.ethereum && data.ethereum.usd ? data.ethereum.usd : 0 },
+                solana: { usd: data.solana && data.solana.usd ? data.solana.usd : 0 },
+                ripple: { usd: data.ripple && data.ripple.usd ? data.ripple.usd : 0 }
             };
-            console.log('Processed prices:', prices);
+            console.log('Processed prices:', JSON.stringify(prices));
             setCachedData('allPrices', prices);
             return prices;
         }
-        console.warn('No price data returned from API');
+        console.warn('No valid price data returned from API');
         return cached || { bitcoin: { usd: 0 }, ethereum: { usd: 0 }, solana: { usd: 0 }, ripple: { usd: 0 } };
     } catch (error) {
         console.error('Failed to fetch all prices:', error);
@@ -257,9 +257,8 @@ async function fetchTrendingWatchlists(forceRefresh = false) {
                 sparkline: coin.sparkline_in_7d ? coin.sparkline_in_7d.price.slice(-24) : [],
                 image: coin.image
             }));
-            // Updated ETH and SOL token IDs based on your live top 100
-            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao']; // Adjusted based on your log
-            const solIds = ['solana', 'jupiter', 'pyth-network', 'helium', 'bonk', 'wormhole', 'stepn', 'jito-staked-sol', 'marinade-staked-sol', 'render']; // Adjusted based on your log
+            const ethIds = ['ethereum', 'uniswap', 'chainlink', 'wrapped-bitcoin', 'shiba-inu', 'maker', 'aave', 'the-graph', 'lido-dao'];
+            const solIds = ['solana', 'jupiter', 'pyth-network', 'helium', 'bonk', 'wormhole', 'stepn', 'jito-staked-sol', 'marinade-staked-sol', 'render'];
             trendingETH = nonStableCoins
                 .filter(coin => ethIds.includes(coin.id))
                 .slice(0, 10)
